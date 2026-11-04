@@ -33,7 +33,10 @@ export type ActiveRound = Round & { server_now: string };
 const tokenSchema = z.string().min(32).max(128);
 
 // Mesma regra de public.round_state(), com o relógio do servidor (usada só para listagens do admin).
-function roundState(r: { status: string; opens_at: string | null; closes_at: string | null }, now = Date.now()): RoundState {
+function roundState(
+  r: { status: string; opens_at: string | null; closes_at: string | null },
+  now = Date.now(),
+): RoundState {
   if (r.status !== "open") return "closed";
   if (r.opens_at && now < Date.parse(r.opens_at)) return "waiting";
   if (r.closes_at && now >= Date.parse(r.closes_at)) return "closed";
@@ -43,30 +46,47 @@ function roundState(r: { status: string; opens_at: string | null; closes_at: str
 // ---------- Rodadas ----------
 
 /** Rodada atual (status 'open') com o estado calculado pelo relógio do banco. `null` = nenhuma rodada. */
-export const getActiveRound = createServerFn({ method: "GET" }).handler(async (): Promise<ActiveRound | null> => {
-  const db = await admin();
-  const { data, error } = await db.rpc("get_active_round");
-  if (error) {
-    console.error(error);
-    throw new Error("Não foi possível carregar a rodada.");
-  }
-  const r = data?.[0];
-  return r ? ({ ...r, status: r.status as Round["status"], state: r.state as RoundState } satisfies ActiveRound) : null;
-});
+export const getActiveRound = createServerFn({ method: "GET" }).handler(
+  async (): Promise<ActiveRound | null> => {
+    const db = await admin();
+    const { data, error } = await db.rpc("get_active_round");
+    if (error) {
+      console.error(error);
+      throw new Error("Não foi possível carregar a rodada.");
+    }
+    const r = data?.[0];
+    return r
+      ? ({
+          ...r,
+          status: r.status as Round["status"],
+          state: r.state as RoundState,
+        } satisfies ActiveRound)
+      : null;
+  },
+);
 
 export const listRounds = createServerFn({ method: "GET" })
   .middleware([requireAdmin])
   .handler(async (): Promise<Round[]> => {
     const db = await admin();
-    const { data, error } = await db.from("rounds").select("*").order("opened_at", { ascending: false });
+    const { data, error } = await db
+      .from("rounds")
+      .select("*")
+      .order("opened_at", { ascending: false });
     if (error) throw new Error("Não foi possível carregar as rodadas.");
     const now = Date.now();
-    return data.map((r) => ({ ...r, status: r.status as Round["status"], state: roundState(r, now) }));
+    return data.map((r) => ({
+      ...r,
+      status: r.status as Round["status"],
+      state: roundState(r, now),
+    }));
   });
 
 export const openRound = createServerFn({ method: "POST" })
   .middleware([requireAdmin])
-  .validator((d: unknown) => z.object({ name: z.string().trim().min(1, "Informe um nome").max(80) }).parse(d))
+  .validator((d: unknown) =>
+    z.object({ name: z.string().trim().min(1, "Informe um nome").max(80) }).parse(d),
+  )
   .handler(async ({ data }) => {
     const db = await admin();
     // Rodada que já encerrou por horário continua com status 'open' no banco: fecha de vez para liberar a próxima.
@@ -77,7 +97,8 @@ export const openRound = createServerFn({ method: "POST" })
       .lte("closes_at", new Date().toISOString());
     const { error } = await db.from("rounds").insert({ name: data.name });
     if (error) {
-      if (error.code === "23505") throw new Error("Já existe uma rodada aberta. Encerre-a antes de abrir outra.");
+      if (error.code === "23505")
+        throw new Error("Já existe uma rodada aberta. Encerre-a antes de abrir outra.");
       throw new Error("Não foi possível abrir a rodada.");
     }
     return { ok: true };
@@ -106,24 +127,8 @@ export type MyOrder = {
   status: "confirmed" | "cancelled" | null;
   /** Versão do pedido (0 = ainda não existe). Enviada de volta ao salvar para detectar edição concorrente. */
   version: number;
-  items: { product_id: string; quantity: number }[];
+  items: { product_id: string; quantity: number; product_name: string | null }[];
 };
-
-/** @deprecated Legado (só nome, sem celular). Será removido quando a nova identificação entrar na tela (bloco 4). */
-export const registerParticipant = createServerFn({ method: "POST" })
-  .validator((d: unknown) =>
-    z.object({ name: z.string().trim().min(1, "Informe seu nome").max(60), token: tokenSchema }).parse(d),
-  )
-  .handler(async ({ data }) => {
-    const db = await admin();
-    const sec = await import("@/lib/participant-security.server");
-    if (!(await sec.withinRateLimit(db, "register", 10, 600))) throw new Error(RATE_LIMITED_MESSAGE);
-    const { error } = await db
-      .from("participants")
-      .insert({ display_name: data.name, token_hash: await hashToken(data.token) });
-    if (error) throw new Error("Não foi possível salvar seu nome.");
-    return { ok: true };
-  });
 
 async function findParticipant(db: Awaited<ReturnType<typeof admin>>, token: string) {
   const { data } = await db
@@ -136,7 +141,9 @@ async function findParticipant(db: Awaited<ReturnType<typeof admin>>, token: str
 
 /** Devolve o participante e o pedido dele na rodada; `participant: null` se o código não for reconhecido. */
 export const getMyOrder = createServerFn({ method: "POST" })
-  .validator((d: unknown) => z.object({ token: tokenSchema, roundId: z.string().uuid().nullable() }).parse(d))
+  .validator((d: unknown) =>
+    z.object({ token: tokenSchema, roundId: z.string().uuid().nullable() }).parse(d),
+  )
   .handler(async ({ data }): Promise<MyOrder | null> => {
     const db = await admin();
     const found = await findParticipant(db, data.token);
@@ -147,7 +154,7 @@ export const getMyOrder = createServerFn({ method: "POST" })
     if (!data.roundId) return { participant, has_phone, status: null, version: 0, items: [] };
     const { data: order } = await db
       .from("orders")
-      .select("id, status, version, order_items(product_id, quantity)")
+      .select("id, status, version, order_items(product_id, quantity, products(name))")
       .eq("round_id", data.roundId)
       .eq("participant_id", participant.id)
       .maybeSingle();
@@ -157,13 +164,19 @@ export const getMyOrder = createServerFn({ method: "POST" })
       has_phone,
       status: order.status as "confirmed" | "cancelled",
       version: order.version,
-      items: order.order_items,
+      items: order.order_items.map((i) => ({
+        product_id: i.product_id,
+        quantity: i.quantity,
+        product_name: i.products?.name ?? null,
+      })),
     };
   });
 
 export const renameParticipant = createServerFn({ method: "POST" })
   .validator((d: unknown) =>
-    z.object({ name: z.string().trim().min(1, "Informe seu nome").max(60), token: tokenSchema }).parse(d),
+    z
+      .object({ name: z.string().trim().min(1, "Informe seu nome").max(60), token: tokenSchema })
+      .parse(d),
   )
   .handler(async ({ data }) => {
     const db = await admin();
@@ -200,7 +213,9 @@ export const submitOrder = createServerFn({ method: "POST" })
         expectedVersion: z.number().int().min(0),
         requestId: z.string().uuid(),
         items: z
-          .array(z.object({ product_id: z.string().uuid(), quantity: z.number().int().min(1).max(99) }))
+          .array(
+            z.object({ product_id: z.string().uuid(), quantity: z.number().int().min(1).max(99) }),
+          )
           .min(1, "Escolha ao menos um item")
           .max(200),
       })
