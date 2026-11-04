@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
+import { requireAdmin } from "@/lib/admin-middleware";
 
 const BUCKET = "product-images";
 
@@ -49,6 +50,7 @@ export const getCatalog = createServerFn({ method: "GET" }).handler(async () => 
 const nameSchema = z.string().trim().min(1, "Informe um nome").max(60);
 
 export const saveCategory = createServerFn({ method: "POST" })
+  .middleware([requireAdmin])
   .validator((d: unknown) => z.object({ id: z.string().uuid().optional(), name: nameSchema }).parse(d))
   .handler(async ({ data }) => {
     const db = await admin();
@@ -64,6 +66,7 @@ export const saveCategory = createServerFn({ method: "POST" })
   });
 
 export const deleteCategory = createServerFn({ method: "POST" })
+  .middleware([requireAdmin])
   .validator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data }) => {
     const db = await admin();
@@ -76,6 +79,7 @@ export const deleteCategory = createServerFn({ method: "POST" })
   });
 
 export const createImageUpload = createServerFn({ method: "POST" })
+  .middleware([requireAdmin])
   .validator((d: unknown) => z.object({ contentType: z.enum(["image/webp", "image/jpeg"]) }).parse(d))
   .handler(async ({ data }) => {
     const db = await admin();
@@ -95,6 +99,7 @@ const productSchema = z.object({
 });
 
 export const saveProduct = createServerFn({ method: "POST" })
+  .middleware([requireAdmin])
   .validator((d: unknown) => productSchema.parse(d))
   .handler(async ({ data }) => {
     const db = await admin();
@@ -120,6 +125,7 @@ export const saveProduct = createServerFn({ method: "POST" })
   });
 
 export const deleteProduct = createServerFn({ method: "POST" })
+  .middleware([requireAdmin])
   .validator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data }) => {
     const db = await admin();

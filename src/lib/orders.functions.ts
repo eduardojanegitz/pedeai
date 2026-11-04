@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
+import { requireAdmin } from "@/lib/admin-middleware";
 
 // Todas as gravações e leituras de dados privados (participantes/pedidos) passam
 // por aqui, com o client administrativo apenas no servidor.
@@ -26,7 +27,7 @@ export const getActiveRound = createServerFn({ method: "GET" }).handler(async ()
   return (data as Round | null) ?? null;
 });
 
-export const listRounds = createServerFn({ method: "GET" }).handler(async () => {
+export const listRounds = createServerFn({ method: "GET" }).middleware([requireAdmin]).handler(async () => {
   const db = await admin();
   const { data, error } = await db.from("rounds").select("*").order("opened_at", { ascending: false });
   if (error) throw new Error("Não foi possível carregar as rodadas.");
@@ -34,6 +35,7 @@ export const listRounds = createServerFn({ method: "GET" }).handler(async () => 
 });
 
 export const openRound = createServerFn({ method: "POST" })
+  .middleware([requireAdmin])
   .validator((d: unknown) => z.object({ name: z.string().trim().min(1, "Informe um nome").max(80) }).parse(d))
   .handler(async ({ data }) => {
     const db = await admin();
@@ -46,6 +48,7 @@ export const openRound = createServerFn({ method: "POST" })
   });
 
 export const closeRound = createServerFn({ method: "POST" })
+  .middleware([requireAdmin])
   .validator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data }) => {
     const db = await admin();
@@ -196,6 +199,7 @@ export type RoundOrder = {
 };
 
 export const getRoundOrders = createServerFn({ method: "GET" })
+  .middleware([requireAdmin])
   .validator((d: unknown) => z.object({ roundId: z.string().uuid() }).parse(d))
   .handler(async ({ data }) => {
     const db = await admin();
