@@ -316,7 +316,9 @@ export function OrderFlow({
         ? "Remova uma escolha"
         : st?.full
           ? "Categoria completa!"
-          : counterText(st!);
+          : st
+            ? counterText(st)
+            : "";
 
   if (steps.length === 0) {
     return (
