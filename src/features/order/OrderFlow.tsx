@@ -27,6 +27,7 @@ import {
   invalidSteps,
   limitMessage,
   missingText,
+  selectedLines,
   stepStatus,
   stepTitle,
   totalCents,
@@ -46,7 +47,7 @@ import type { Menu } from "./types";
 type View = { kind: "step"; index: number } | { kind: "review" };
 type Fly = { id: number; x: number; y: number; dx: number; dy: number; src: string | null };
 
-export type SavedInfo = { isUpdate: boolean };
+export type SavedInfo = { isUpdate: boolean; items: { name: string; quantity: number }[] };
 
 /**
  * Jornada de escolha: uma etapa por categoria, revisão, edição pontual e confirmação.
@@ -239,7 +240,12 @@ export function OrderFlow({
       clearDraft(round.id, me.participant.id);
       // Só avança depois de reler o pedido salvo: a tela nunca mostra sucesso sem confirmação do servidor.
       await qc.invalidateQueries({ queryKey: ["my-order"] });
-      onSaved({ isUpdate: existing });
+      onSaved({
+        isUpdate: existing,
+        items: steps.flatMap((s) =>
+          selectedLines(cart, s).map(({ product, quantity }) => ({ name: product.name, quantity })),
+        ),
+      });
     } catch (e) {
       // Falha de rede: a chave de reenvio é mantida, então tentar de novo não duplica o pedido.
       toast.error(`${errMsg(e)} Suas escolhas continuam aqui; tente confirmar de novo.`);

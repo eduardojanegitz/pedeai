@@ -6,7 +6,7 @@ import { Logo } from "@/components/brand/Logo";
 import { getMenu } from "@/lib/catalog.functions";
 import { getMyOrder, getActiveRound, type ActiveRound } from "@/lib/orders.functions";
 import { getToken } from "@/lib/participant";
-import { Celebrate } from "@/features/order/Celebrate";
+import { OrderSuccess, type SuccessItem } from "@/features/order/OrderSuccess";
 import { ConfirmedOrder } from "@/features/order/ConfirmedOrder";
 import { IdentifyScreen } from "@/features/order/IdentifyScreen";
 import { OrderFlow } from "@/features/order/OrderFlow";
@@ -99,7 +99,9 @@ function Participant({
   const menu = useQuery({ ...menuQuery, enabled: round.state === "open" || !!me.data });
 
   const [editing, setEditing] = useState(false);
-  const [celebrate, setCelebrate] = useState<{ update: boolean } | null>(null);
+  const [celebrate, setCelebrate] = useState<{ update: boolean; items: SuccessItem[] } | null>(
+    null,
+  );
   const [lastWasUpdate, setLastWasUpdate] = useState(false);
 
   if (token === undefined || (token && me.isPending)) return <Loading />;
@@ -143,11 +145,17 @@ function Participant({
 
   return (
     <>
-      <Celebrate
-        show={celebrate !== null}
-        update={celebrate?.update ?? false}
-        onDone={() => setCelebrate(null)}
-      />
+      {celebrate && (
+        <OrderSuccess
+          variant={celebrate.update ? "updated" : "created"}
+          items={celebrate.items}
+          onView={() => setCelebrate(null)}
+          onEdit={() => {
+            setCelebrate(null);
+            setEditing(true);
+          }}
+        />
+      )}
       {confirmed && !editing ? (
         <ConfirmedOrder
           round={round}
@@ -167,10 +175,10 @@ function Participant({
           menu={menu.data}
           existing={confirmed}
           onExit={() => setEditing(false)}
-          onSaved={({ isUpdate }) => {
+          onSaved={({ isUpdate, items }) => {
             setLastWasUpdate(isUpdate);
             setEditing(false);
-            setCelebrate({ update: isUpdate });
+            setCelebrate({ update: isUpdate, items });
           }}
         />
       )}

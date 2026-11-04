@@ -1,5 +1,6 @@
 import { motion, useReducedMotion } from "motion/react";
-import { ChevronUp, Loader2, ShoppingBag } from "lucide-react";
+import { ChevronUp, Loader2 } from "lucide-react";
+import { BagBadge } from "@/components/brand/BagBadge";
 import type { Ref } from "react";
 import { formatBRL } from "@/lib/format";
 import { btnPrimary } from "./ui";
@@ -40,18 +41,23 @@ export function FloatingDock({
       transition={{ type: "spring", stiffness: 260, damping: 26 }}
       className="fixed inset-x-0 bottom-0 z-30 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
     >
-      <div className="pop-card mx-auto flex max-w-xl items-center gap-2 rounded-[1.75rem] bg-card p-2 shadow-pop-lg">
+      <div className="pop-card relative mx-auto flex max-w-xl items-center gap-2 overflow-hidden rounded-[1.75rem] bg-card p-2 shadow-pop-lg">
+        {primaryBusy && (
+          <span aria-hidden className="absolute inset-x-0 bottom-0 h-1 overflow-hidden bg-muted">
+            <motion.span
+              className="block h-full w-1/3 rounded-full bg-primary"
+              animate={reduce ? { opacity: [0.4, 1, 0.4] } : { x: ["-100%", "300%"] }}
+              transition={{ repeat: Infinity, duration: 1.1, ease: "easeInOut" }}
+            />
+          </span>
+        )}
         <button
           type="button"
           onClick={onOpenSummary}
           aria-label={`Abrir resumo do pedido: ${count} ${count === 1 ? "item" : "itens"}`}
           className="flex min-h-12 min-w-0 flex-1 items-center gap-3 rounded-full px-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
-          <span
-            ref={bagRef}
-            className="relative grid h-11 w-11 shrink-0 place-items-center rounded-full border-2 border-foreground bg-accent"
-          >
-            <ShoppingBag className="h-5 w-5" aria-hidden />
+          <BagBadge ref={bagRef} size={44}>
             <motion.span
               key={count}
               initial={reduce ? false : { scale: 1.6 }}
@@ -61,7 +67,7 @@ export function FloatingDock({
             >
               {count}
             </motion.span>
-          </span>
+          </BagBadge>
           <span className="min-w-0">
             <span className="flex items-center gap-1 text-sm font-bold">
               {totalCents != null ? formatBRL(totalCents) : "Meu pedido"}
