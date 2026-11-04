@@ -14,20 +14,68 @@ export type Database = {
   }
   public: {
     Tables: {
+      admins: {
+        Row: {
+          created_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      rate_limits: {
+        Row: {
+          hits: number
+          key: string
+          window_start: string
+        }
+        Insert: {
+          hits?: number
+          key: string
+          window_start?: string
+        }
+        Update: {
+          hits?: number
+          key?: string
+          window_start?: string
+        }
+        Relationships: []
+      }
       categories: {
         Row: {
+          allow_quantity: boolean
+          description: string | null
+          is_active: boolean
+          max_select: number
+          min_select: number
           created_at: string
           id: string
           name: string
           position: number
         }
         Insert: {
+          allow_quantity?: boolean
+          description?: string | null
+          is_active?: boolean
+          max_select?: number
+          min_select?: number
           created_at?: string
           id?: string
           name: string
           position?: number
         }
         Update: {
+          allow_quantity?: boolean
+          description?: string | null
+          is_active?: boolean
+          max_select?: number
+          min_select?: number
           created_at?: string
           id?: string
           name?: string
@@ -70,6 +118,8 @@ export type Database = {
       }
       orders: {
         Row: {
+          last_request_id: string | null
+          version: number
           created_at: string
           id: string
           participant_id: string
@@ -78,6 +128,8 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          last_request_id?: string | null
+          version?: number
           created_at?: string
           id?: string
           participant_id: string
@@ -86,6 +138,8 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          last_request_id?: string | null
+          version?: number
           created_at?: string
           id?: string
           participant_id?: string
@@ -112,18 +166,30 @@ export type Database = {
       }
       participants: {
         Row: {
+          locked_until: string | null
+          phone_e164: string | null
+          recovery_attempts: number
+          recovery_hash: string | null
           created_at: string
           display_name: string
           id: string
           token_hash: string
         }
         Insert: {
+          locked_until?: string | null
+          phone_e164?: string | null
+          recovery_attempts?: number
+          recovery_hash?: string | null
           created_at?: string
           display_name: string
           id?: string
           token_hash: string
         }
         Update: {
+          locked_until?: string | null
+          phone_e164?: string | null
+          recovery_attempts?: number
+          recovery_hash?: string | null
           created_at?: string
           display_name?: string
           id?: string
@@ -133,6 +199,8 @@ export type Database = {
       }
       products: {
         Row: {
+          is_active: boolean
+          price_cents: number | null
           category_id: string | null
           created_at: string
           description: string | null
@@ -143,6 +211,8 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          is_active?: boolean
+          price_cents?: number | null
           category_id?: string | null
           created_at?: string
           description?: string | null
@@ -153,6 +223,8 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          is_active?: boolean
+          price_cents?: number | null
           category_id?: string | null
           created_at?: string
           description?: string | null
@@ -174,6 +246,8 @@ export type Database = {
       }
       rounds: {
         Row: {
+          closes_at: string | null
+          opens_at: string | null
           closed_at: string | null
           id: string
           name: string
@@ -181,6 +255,8 @@ export type Database = {
           status: string
         }
         Insert: {
+          closes_at?: string | null
+          opens_at?: string | null
           closed_at?: string | null
           id?: string
           name: string
@@ -188,6 +264,8 @@ export type Database = {
           status?: string
         }
         Update: {
+          closes_at?: string | null
+          opens_at?: string | null
           closed_at?: string | null
           id?: string
           name?: string
@@ -201,7 +279,46 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      begin_recovery: {
+        Args: { p_phone: string }
+        Returns: { participant_id: string; recovery_hash: string }[]
+      }
+      finish_recovery: {
+        Args: { p_participant: string; p_token_hash: string }
+        Returns: undefined
+      }
+      get_active_round: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          closed_at: string | null
+          closes_at: string | null
+          id: string
+          name: string
+          opened_at: string
+          opens_at: string | null
+          server_now: string
+          state: string
+          status: string
+        }[]
+      }
+      get_round_state: {
+        Args: { p_round: string }
+        Returns: string
+      }
+      hit_rate_limit: {
+        Args: { p_key: string; p_max: number; p_window_seconds: number }
+        Returns: boolean
+      }
+      submit_order: {
+        Args: {
+          p_expected_version: number
+          p_items: Json
+          p_participant: string
+          p_request_id: string
+          p_round: string
+        }
+        Returns: Json
+      }
     }
     Enums: {
       [_ in never]: never

@@ -1,11 +1,12 @@
-# Cardápio Digital — MVP
+# PedeAí!
 
-Cardápio interativo (TanStack Start + React + Tailwind + Motion) com banco e fotos no Lovable Cloud (Supabase).
+Cardápio digital interativo (TanStack Start + React + Tailwind + Motion) com banco, login do admin e fotos no Supabase (hoje via Lovable Cloud).
 
 ## Como funciona
 
-- `/` — participante digita o nome (o aparelho guarda um código secreto), escolhe itens, confirma. Pode editar/cancelar até a rodada ser encerrada.
-- `/admin` — **Produtos** (categorias, fotos), **Rodadas** (abrir/encerrar; só uma aberta por vez) e **Pedidos** (por participante, ranking, PDF, Excel e texto para WhatsApp).
+- `/` — o participante informa nome e celular, escolhe itens **uma categoria por etapa** (cada categoria tem mínimo e máximo), revisa e confirma. Vê a animação de conclusão só depois de o servidor confirmar. Pode editar ou cancelar até a rodada encerrar.
+- Em outro aparelho, o participante recupera o pedido com o **código de recuperação** (mostrado uma vez). Celular sozinho não prova identidade.
+- `/admin` (login por e-mail e senha, só administradores) — **Cardápio** (categorias com regras, produtos, preço, disponibilidade, ordem), **Rodadas** (abertura/encerramento em horário de Brasília, reabrir) e **Pedidos** (filtros, visão consolidada, editados, PDF, Excel, texto para WhatsApp, redefinir código).
 
 ## Desenvolvimento
 
@@ -16,15 +17,40 @@ npm run build
 npm test
 ```
 
-O `.env` tem apenas chaves públicas. A `SUPABASE_SERVICE_ROLE_KEY` é injetada pelo Lovable Cloud na publicação e **nunca** vai para o navegador.
+Variável opcional no servidor: `RECOVERY_PEPPER` (texto longo e aleatório) reforça o hash dos códigos de recuperação; sem ela usa a `SUPABASE_SERVICE_ROLE_KEY` (trocar essa chave invalida os códigos já emitidos).
 
-## Segurança (leia)
+O `.env` não é versionado. A `SUPABASE_SERVICE_ROLE_KEY` é injetada pelo Lovable Cloud na publicação e **nunca** vai para o navegador.
 
-- O navegador só lê categorias, produtos e rodadas (RLS de SELECT público). Participantes, pedidos e itens só são acessados por funções de servidor.
-- O participante é identificado por um código aleatório guardado no aparelho (só o hash fica no banco). Quem limpar os dados do navegador perde o acesso ao pedido anterior.
-- **`/admin` é aberto**: qualquer pessoa com o endereço pode alterar produtos, abrir/encerrar rodadas e ver nomes e pedidos. Esconder a rota não protege. Use só internamente e por pouco tempo; para uso público, adicione um "código do admin" conferido no servidor. Há implicações de LGPD (nomes dos participantes).
-- Não há limite de taxa: alguém pode criar pedidos/participantes em massa.
+## Banco de dados
 
-## Publicação e plano gratuito
+- `supabase/setup.sql` — estrutura-base para um projeto Supabase novo.
+- `supabase/migrations/` — alterações incrementais, em ordem de nome. Todas são aditivas (não apagam dados). **Rode-as manualmente no SQL Editor, na ordem**. Nenhuma é aplicada automaticamente.
+- `supabase/first-admin.sql` e `docs/ADMIN.md` — como criar o primeiro administrador (desative o cadastro público antes).
+- `src/integrations/supabase/types.ts` foi ajustado à mão para as migrações; o Lovable pode regenerá-lo.
 
-Publique pelo botão Publish do Lovable (HTTPS e endereço `*.lovable.app`). Confira os limites atuais do plano gratuito do Lovable Cloud/Supabase (banco, armazenamento, tráfego e possível pausa por inatividade) nas páginas oficiais antes de usar em um evento.
+## Segurança
+
+- O navegador só lê categorias, produtos e rodadas (RLS de SELECT público). Participantes, pedidos e itens só passam por funções de servidor com a chave de serviço.
+- Toda função de admin exige sessão válida **e** linha em `public.admins`; o redirecionamento no navegador é só conveniência.
+- Regras do pedido (rodada aberta, produto disponível, mínimo/máximo, versão, repetição de envio) são validadas no banco, em uma única transação (`submit_order`).
+- Recuperação: código de 10 caracteres guardado só como HMAC; 5 tentativas erradas bloqueiam por 15 min; a resposta é igual para celular desconhecido, código errado e bloqueio. Limite de requisições por IP (o IP é guardado só como hash).
+- Dados pessoais (nome e celular) são visíveis apenas ao administrador e não vão nas exportações. Há implicações de LGPD: informe os participantes e apague os dados quando não forem mais necessários.
+
+## Limitações conhecidas
+
+- Um aparelho ativo por participante: recuperar o pedido em outro aparelho desconecta o anterior.
+- Quem perde o código e não está mais logado precisa pedir ao administrador a redefinição.
+- Cancelar um pedido não incrementa a versão dele.
+- A animação foi testada em navegador de computador; falta testar em celular real de entrada.
+- O efeito cinematográfico "produto escolhido voa para o resumo" não foi feito (existe só o efeito simples).
+- Horário sempre de Brasília (UTC-3 fixo, sem horário de verão desde 2019).
+- Produtos sem categoria não aparecem no cardápio até serem atribuídos.
+- Fotos exigem URL assinada (bucket privado), gerada pelo servidor.
+
+## Publicação e planos gratuitos
+
+Publique pelo botão Publish do Lovable (HTTPS em `*.lovable.app`). Limites conferidos em 04/11/2026 (confirme nas páginas oficiais antes de um evento):
+
+- **Supabase (grátis):** 500 MB de banco por projeto, 1 GB de arquivos, 50 mil usuários ativos/mês no Auth. **O projeto é pausado após cerca de 1 semana sem uso** (dados preservados; restaure no painel). Para uso semanal, abra o app antes do evento ou use plano pago.
+- **Cloudflare Workers (grátis), se hospedar fora do Lovable:** 100 mil requisições/dia, **10 ms de CPU por requisição** (espera por rede/banco não conta), 128 MB de memória. A renderização no servidor deste app pode se aproximar do limite de CPU: teste antes de depender do plano grátis. O build gera um worker via Nitro (`npx nitro deploy --prebuilt`).
+- Volume típico (dezenas de pessoas) fica muito abaixo desses limites.
