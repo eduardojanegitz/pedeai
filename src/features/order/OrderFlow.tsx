@@ -272,7 +272,7 @@ export function OrderFlow({
     setVersion(fresh.version);
     await confirm(fresh.version);
   };
-  const useLatest = async () => {
+  const showLatest = async () => {
     setConflict(false);
     const fresh = await loadLatest();
     if (!fresh) return;
@@ -508,7 +508,7 @@ export function OrderFlow({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => void useLatest()}>Ver versão atual</AlertDialogCancel>
+            <AlertDialogCancel onClick={() => void showLatest()}>Ver versão atual</AlertDialogCancel>
             <AlertDialogAction onClick={() => void keepMine()}>Manter as minhas</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
