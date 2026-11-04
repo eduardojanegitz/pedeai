@@ -124,7 +124,7 @@ function MenuAdminPage() {
                 key={p.id}
                 className="flex items-center justify-between gap-2 rounded-2xl bg-card px-3 py-2 text-card-foreground"
               >
-                <span className="min-w-0 truncate font-semibold">{p.name}</span>
+                <span className="min-w-0 break-words font-semibold">{p.name}</span>
                 <button className={btnPlain} onClick={() => setEditProd({ product: p })}>
                   <Pencil className="h-4 w-4" aria-hidden /> Escolher categoria
                 </button>
@@ -272,7 +272,7 @@ function MenuAdminPage() {
                           </span>
                         )}
                         <div className="min-w-0 flex-1 basis-40">
-                          <p className="truncate font-bold">{p.name}</p>
+                          <p className="break-words font-bold">{p.name}</p>
                           <p className="text-sm text-muted-foreground">
                             {p.price_cents != null ? formatBRL(p.price_cents) : "Sem preço"}
                             {!p.is_active && " · indisponível"}
