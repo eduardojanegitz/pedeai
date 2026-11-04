@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/admin-middleware";
+import { categoryInputSchema } from "@/lib/category-rules";
 
 const BUCKET = "product-images";
 
@@ -82,25 +83,47 @@ export const getCatalog = createServerFn({ method: "GET" })
   .middleware([requireAdmin])
   .handler(() => loadCatalog(false));
 
-const nameSchema = z.string().trim().min(1, "Informe um nome").max(60);
-
 export const saveCategory = createServerFn({ method: "POST" })
   .middleware([requireAdmin])
-  .validator((d: unknown) =>
-    z.object({ id: z.string().uuid().optional(), name: nameSchema }).parse(d),
-  )
+  .validator((d: unknown) => categoryInputSchema.parse(d))
   .handler(async ({ data }) => {
     const db = await admin();
+    const row = {
+      name: data.name,
+      description: data.description,
+      min_select: data.min_select,
+      max_select: data.max_select,
+      allow_quantity: data.allow_quantity,
+      is_active: data.is_active,
+    };
     if (data.id) {
-      const { error } = await db.from("categories").update({ name: data.name }).eq("id", data.id);
+      const { error } = await db.from("categories").update(row).eq("id", data.id);
       if (error) throw new Error("Não foi possível salvar a categoria.");
     } else {
-      const { count } = await db.from("categories").select("id", { count: "exact", head: true });
+      const { data: last } = await db
+        .from("categories")
+        .select("position")
+        .order("position", { ascending: false })
+        .limit(1)
+        .maybeSingle();
       const { error } = await db
         .from("categories")
-        .insert({ name: data.name, position: count ?? 0 });
+        .insert({ ...row, position: (last?.position ?? -1) + 1 });
       if (error) throw new Error("Não foi possível criar a categoria.");
     }
+    return { ok: true };
+  });
+
+/** Grava a nova ordem: `ids` na sequência desejada (posição = índice). */
+export const reorderCategories = createServerFn({ method: "POST" })
+  .middleware([requireAdmin])
+  .validator((d: unknown) => z.object({ ids: z.array(z.string().uuid()).min(1).max(200) }).parse(d))
+  .handler(async ({ data }) => {
+    const db = await admin();
+    const results = await Promise.all(
+      data.ids.map((id, position) => db.from("categories").update({ position }).eq("id", id)),
+    );
+    if (results.some((r) => r.error)) throw new Error("Não foi possível reordenar as categorias.");
     return { ok: true };
   });
 
@@ -136,11 +159,14 @@ const productSchema = z.object({
   id: z.string().uuid().optional(),
   name: z.string().trim().min(1, "Informe um nome").max(80),
   description: z.string().trim().max(500).nullable(),
-  category_id: z.string().uuid().nullable(),
+  // Produto sem categoria não aparece no cardápio: a categoria passa a ser obrigatória.
+  category_id: z.string().uuid("Escolha uma categoria"),
   image_path: z
     .string()
     .regex(/^products\/[\w-]+\.(webp|jpg)$/)
     .nullable(),
+  price_cents: z.number().int().min(0).max(9_999_999).nullable(),
+  is_active: z.boolean(),
 });
 
 export const saveProduct = createServerFn({ method: "POST" })
@@ -153,6 +179,8 @@ export const saveProduct = createServerFn({ method: "POST" })
       description: data.description || null,
       category_id: data.category_id,
       image_path: data.image_path,
+      price_cents: data.price_cents,
+      is_active: data.is_active,
     };
     if (data.id) {
       const { data: old } = await db
@@ -166,10 +194,57 @@ export const saveProduct = createServerFn({ method: "POST" })
         await db.storage.from(BUCKET).remove([old.image_path]);
       }
     } else {
-      const { count } = await db.from("products").select("id", { count: "exact", head: true });
-      const { error } = await db.from("products").insert({ ...row, position: count ?? 0 });
+      const { data: last } = await db
+        .from("products")
+        .select("position")
+        .eq("category_id", data.category_id)
+        .order("position", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const { error } = await db
+        .from("products")
+        .insert({ ...row, position: (last?.position ?? -1) + 1 });
       if (error) throw new Error("Não foi possível criar o produto.");
     }
+    return { ok: true };
+  });
+
+/** Liga/desliga a disponibilidade rapidamente (produto some do cardápio, sem apagar). */
+export const setProductActive = createServerFn({ method: "POST" })
+  .middleware([requireAdmin])
+  .validator((d: unknown) => z.object({ id: z.string().uuid(), is_active: z.boolean() }).parse(d))
+  .handler(async ({ data }) => {
+    const db = await admin();
+    const { error } = await db
+      .from("products")
+      .update({ is_active: data.is_active })
+      .eq("id", data.id);
+    if (error) throw new Error("Não foi possível alterar a disponibilidade.");
+    return { ok: true };
+  });
+
+export const setCategoryActive = createServerFn({ method: "POST" })
+  .middleware([requireAdmin])
+  .validator((d: unknown) => z.object({ id: z.string().uuid(), is_active: z.boolean() }).parse(d))
+  .handler(async ({ data }) => {
+    const db = await admin();
+    const { error } = await db
+      .from("categories")
+      .update({ is_active: data.is_active })
+      .eq("id", data.id);
+    if (error) throw new Error("Não foi possível alterar a categoria.");
+    return { ok: true };
+  });
+
+export const reorderProducts = createServerFn({ method: "POST" })
+  .middleware([requireAdmin])
+  .validator((d: unknown) => z.object({ ids: z.array(z.string().uuid()).min(1).max(500) }).parse(d))
+  .handler(async ({ data }) => {
+    const db = await admin();
+    const results = await Promise.all(
+      data.ids.map((id, position) => db.from("products").update({ position }).eq("id", id)),
+    );
+    if (results.some((r) => r.error)) throw new Error("Não foi possível reordenar os produtos.");
     return { ok: true };
   });
 
@@ -182,7 +257,9 @@ export const deleteProduct = createServerFn({ method: "POST" })
     const { error } = await db.from("products").delete().eq("id", data.id);
     if (error) {
       if (error.code === "23503")
-        throw new Error("Este produto já aparece em pedidos e não pode ser excluído.");
+        throw new Error(
+          "Este produto já aparece em pedidos e não pode ser excluído. Desative-o para tirá-lo do cardápio.",
+        );
       throw new Error("Não foi possível excluir o produto.");
     }
     if (old?.image_path) await db.storage.from(BUCKET).remove([old.image_path]);

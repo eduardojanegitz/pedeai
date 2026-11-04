@@ -37,7 +37,7 @@ export const Route = createFileRoute("/admin")({
 });
 
 const tabs = [
-  { to: "/admin", label: "Produtos", exact: true },
+  { to: "/admin", label: "Cardápio", exact: true },
   { to: "/admin/rounds", label: "Rodadas", exact: false },
   { to: "/admin/orders", label: "Pedidos", exact: false },
 ] as const;

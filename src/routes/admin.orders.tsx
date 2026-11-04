@@ -1,44 +1,116 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { queryOptions, useQuery, useSuspenseQuery } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
 import { animate, motion, useMotionValue, useReducedMotion, useTransform } from "motion/react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { ClipboardCopy, FileSpreadsheet, FileText, RefreshCw } from "lucide-react";
-import { getRoundOrders, listRounds } from "@/lib/orders.functions";
-import { copyText, exportExcel, exportPdf, ranking, toText, totalItems } from "@/lib/export";
+import {
+  Check,
+  ClipboardCopy,
+  Copy,
+  FileSpreadsheet,
+  FileText,
+  KeyRound,
+  Pencil,
+  RefreshCw,
+  Search,
+} from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { ConfirmDialog } from "@/features/admin/ConfirmDialog";
+import {
+  consolidate,
+  emptyFilters,
+  filterOrders,
+  groupByCategory,
+  NO_CATEGORY,
+  summarize,
+  type OrderFilters,
+} from "@/features/admin/orders-logic";
+import { btnPlain, btnPrimary, errMsg, field } from "@/features/admin/ui";
+import { copyText, exportExcel, exportPdf, toText } from "@/lib/export";
+import { formatBRL, formatSaoPauloTime } from "@/lib/format";
+import {
+  getRoundOrders,
+  listRounds,
+  resetParticipantCode,
+  type RoundOrder,
+} from "@/lib/orders.functions";
 
 const roundsQuery = queryOptions({ queryKey: ["rounds"], queryFn: () => listRounds() });
 
 export const Route = createFileRoute("/admin/orders")({
+  head: () => ({ meta: [{ title: "Pedidos — PedeAí!" }, { name: "robots", content: "noindex" }] }),
   loader: ({ context }) => context.queryClient.ensureQueryData(roundsQuery),
   pendingComponent: () => <div className="h-40 animate-pulse rounded-3xl bg-muted" />,
   component: OrdersPage,
 });
-
-const btn =
-  "pop-press inline-flex items-center gap-2 rounded-full border-2 border-foreground px-4 py-2 font-bold shadow-pop disabled:opacity-50";
 
 function Counter({ value }: { value: number }) {
   const reduce = useReducedMotion();
   const mv = useMotionValue(reduce ? value : 0);
   const rounded = useTransform(mv, (v) => Math.round(v));
   useEffect(() => {
-    const c = animate(mv, value, { duration: reduce ? 0 : 0.8, ease: "easeOut" });
+    const c = animate(mv, value, { duration: reduce ? 0 : 0.6, ease: "easeOut" });
     return () => c.stop();
   }, [value, mv, reduce]);
   return <motion.span>{rounded}</motion.span>;
 }
 
+function Tile({
+  label,
+  children,
+  tone,
+}: {
+  label: string;
+  children: React.ReactNode;
+  tone: string;
+}) {
+  return (
+    <div className={`pop-card p-4 ${tone}`}>
+      <p className="text-xs font-bold uppercase tracking-widest">{label}</p>
+      <p className="font-display text-5xl leading-none">{children}</p>
+    </div>
+  );
+}
+
+type View = "participants" | "totals";
+
 function OrdersPage() {
   const { data: rounds } = useSuspenseQuery(roundsQuery);
-  const [roundId, setRoundId] = useState<string | undefined>(rounds[0]?.id);
+  const [roundId, setRoundId] = useState<string | undefined>(
+    rounds.find((r) => r.status === "open")?.id ?? rounds[0]?.id,
+  );
   const round = rounds.find((r) => r.id === roundId);
+  // Atualiza sozinho a cada 30 s para acompanhar novos pedidos e edições.
   const q = useQuery({
     queryKey: ["round-orders", roundId],
     queryFn: () => getRoundOrders({ data: { roundId: roundId! } }),
     enabled: !!roundId,
+    refetchInterval: 30_000,
   });
-  const orders = q.data ?? [];
+  const orders = useMemo(() => q.data ?? [], [q.data]);
+  const [filters, setFilters] = useState<OrderFilters>(emptyFilters);
+  const [view, setView] = useState<View>("participants");
+  const [resetFor, setResetFor] = useState<RoundOrder | null>(null);
+
+  const filtered = useMemo(() => filterOrders(orders, filters), [orders, filters]);
+  const stats = useMemo(() => summarize(orders), [orders]);
+  const totals = useMemo(() => consolidate(filtered), [filtered]);
+  const categories = useMemo(() => consolidate(orders).map((c) => c.category), [orders]);
+  const products = useMemo(
+    () =>
+      consolidate(orders).flatMap((c) =>
+        !filters.category || (c.category ?? NO_CATEGORY) === filters.category ? c.products : [],
+      ),
+    [orders, filters.category],
+  );
+  const filtering = filters.search || filters.category || filters.productId || filters.editedOnly;
 
   const run = (fn: () => Promise<void>, ok?: string) => async () => {
     try {
@@ -53,39 +125,68 @@ function OrdersPage() {
     <div>
       <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="text-sm font-semibold uppercase tracking-widest text-muted-foreground">Painel</p>
+          <p className="text-sm font-semibold uppercase tracking-widest text-muted-foreground">
+            Painel
+          </p>
           <h1 className="text-6xl text-primary">Pedidos</h1>
         </div>
         {rounds.length > 0 && (
           <div className="flex items-center gap-2">
-            <label htmlFor="round" className="sr-only">Rodada</label>
+            <label htmlFor="round" className="sr-only">
+              Rodada
+            </label>
             <select
               id="round"
               value={roundId}
-              onChange={(e) => setRoundId(e.target.value)}
+              onChange={(e) => {
+                setRoundId(e.target.value);
+                setFilters(emptyFilters);
+              }}
               className="rounded-full border-2 border-foreground bg-card px-4 py-2 font-bold"
             >
               {rounds.map((r) => (
                 <option key={r.id} value={r.id}>
-                  {r.name} {r.status === "open" ? "(aberta)" : ""}
+                  {r.name}{" "}
+                  {r.state === "open" ? "(aberta)" : r.state === "waiting" ? "(aguardando)" : ""}
                 </option>
               ))}
             </select>
-            <button aria-label="Atualizar" className={`${btn} bg-card`} onClick={() => q.refetch()}>
-              <RefreshCw className={`h-4 w-4 ${q.isFetching ? "animate-spin" : ""}`} />
+            <button
+              aria-label="Atualizar pedidos"
+              className={btnPlain}
+              onClick={() => void q.refetch()}
+            >
+              <RefreshCw className={`h-4 w-4 ${q.isFetching ? "animate-spin" : ""}`} aria-hidden />
             </button>
           </div>
         )}
       </header>
+      {q.dataUpdatedAt > 0 && (
+        <p className="-mt-3 mb-4 text-xs text-muted-foreground" aria-live="off">
+          Atualizado às {formatSaoPauloTime(new Date(q.dataUpdatedAt).toISOString())} · atualiza
+          sozinho a cada 30 s
+        </p>
+      )}
 
       {!round ? (
         <div className="pop-card p-10 text-center">
           <h2 className="text-4xl">Nenhuma rodada</h2>
-          <p className="mt-2 text-muted-foreground">Abra uma rodada na aba Rodadas para receber pedidos.</p>
+          <p className="mt-2 text-muted-foreground">
+            Crie uma rodada na aba Rodadas para receber pedidos.
+          </p>
         </div>
       ) : q.isPending ? (
         <div className="space-y-3">
-          {[0, 1, 2].map((i) => <div key={i} className="h-24 animate-pulse rounded-3xl bg-muted" />)}
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="h-24 animate-pulse rounded-3xl bg-muted" />
+          ))}
+        </div>
+      ) : q.isError ? (
+        <div role="alert" className="pop-card p-8 text-center">
+          <h2 className="text-3xl">Não foi possível carregar os pedidos</h2>
+          <button className={`${btnPrimary} mt-4`} onClick={() => void q.refetch()}>
+            Tentar de novo
+          </button>
         </div>
       ) : orders.length === 0 ? (
         <div className="pop-card p-10 text-center">
@@ -94,68 +195,339 @@ function OrdersPage() {
         </div>
       ) : (
         <>
-          <div className="mb-6 grid grid-cols-2 gap-4">
-            <div className="pop-card bg-secondary p-5 text-secondary-foreground">
-              <p className="text-sm font-bold uppercase tracking-widest">Participantes</p>
-              <p className="font-display text-6xl"><Counter value={orders.length} /></p>
-            </div>
-            <div className="pop-card bg-accent p-5 text-accent-foreground">
-              <p className="text-sm font-bold uppercase tracking-widest">Itens</p>
-              <p className="font-display text-6xl"><Counter value={totalItems(orders)} /></p>
-            </div>
+          <div
+            className={`mb-6 grid gap-4 ${stats.totalCents != null ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-3"}`}
+          >
+            <Tile label="Pedidos" tone="bg-secondary text-secondary-foreground">
+              <Counter value={stats.orders} />
+            </Tile>
+            <Tile label="Itens" tone="bg-accent text-accent-foreground">
+              <Counter value={stats.items} />
+            </Tile>
+            <Tile label="Editados" tone="bg-card">
+              <Counter value={stats.edited} />
+            </Tile>
+            {stats.totalCents != null && (
+              <Tile label="Valor" tone="bg-card">
+                <span className="text-4xl">{formatBRL(stats.totalCents)}</span>
+              </Tile>
+            )}
           </div>
 
-          <div className="mb-8 flex flex-wrap gap-2">
-            <button className={`${btn} bg-primary text-primary-foreground`} onClick={run(() => exportPdf(round.name, orders))}>
-              <FileText className="h-4 w-4" /> PDF
+          <div className="mb-6 flex flex-wrap gap-2">
+            <button className={btnPrimary} onClick={run(() => exportPdf(round.name, orders))}>
+              <FileText className="h-4 w-4" aria-hidden /> PDF
             </button>
-            <button className={`${btn} bg-card`} onClick={run(() => exportExcel(round.name, orders))}>
-              <FileSpreadsheet className="h-4 w-4" /> Excel
+            <button className={btnPlain} onClick={run(() => exportExcel(round.name, orders))}>
+              <FileSpreadsheet className="h-4 w-4" aria-hidden /> Excel
             </button>
             <button
-              className={`${btn} bg-card`}
-              onClick={run(() => copyText(toText(round.name, orders)), "Copiado para a área de transferência")}
+              className={btnPlain}
+              onClick={run(
+                () => copyText(toText(round.name, orders)),
+                "Copiado para a área de transferência",
+              )}
             >
-              <ClipboardCopy className="h-4 w-4" /> Copiar texto
+              <ClipboardCopy className="h-4 w-4" aria-hidden /> Copiar texto
             </button>
           </div>
 
-          <section className="mb-8">
-            <h2 className="mb-3 text-3xl">Mais pedidos</h2>
-            <ul className="pop-card divide-y-2 divide-foreground/10 overflow-hidden">
-              {ranking(orders).map((r, i) => (
-                <li key={r.product} className="flex items-center justify-between px-4 py-2">
-                  <span><span className="mr-2 font-display text-2xl text-primary">{i + 1}</span>{r.product}</span>
-                  <span className="font-bold">{r.quantity}</span>
+          <section aria-label="Filtros" className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="relative">
+              <label htmlFor="f-search" className="sr-only">
+                Buscar participante
+              </label>
+              <Search
+                className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                aria-hidden
+              />
+              <input
+                id="f-search"
+                value={filters.search}
+                onChange={(e) => setFilters((f) => ({ ...f, search: e.target.value }))}
+                placeholder="Buscar nome ou celular"
+                className={`${field} pl-10`}
+              />
+            </div>
+            <div>
+              <label htmlFor="f-cat" className="sr-only">
+                Categoria
+              </label>
+              <select
+                id="f-cat"
+                value={filters.category}
+                onChange={(e) =>
+                  setFilters((f) => ({ ...f, category: e.target.value, productId: "" }))
+                }
+                className={field}
+              >
+                <option value="">Todas as categorias</option>
+                {categories.map((c) => (
+                  <option key={c ?? NO_CATEGORY} value={c ?? NO_CATEGORY}>
+                    {c ?? "Sem categoria"}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label htmlFor="f-prod" className="sr-only">
+                Produto
+              </label>
+              <select
+                id="f-prod"
+                value={filters.productId}
+                onChange={(e) => setFilters((f) => ({ ...f, productId: e.target.value }))}
+                className={field}
+              >
+                <option value="">Todos os produtos</option>
+                {products.map((p) => (
+                  <option key={p.product_id} value={p.product_id}>
+                    {p.product}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <label className="flex min-h-11 cursor-pointer items-center gap-3 rounded-2xl border-2 border-foreground bg-card px-4">
+              <input
+                type="checkbox"
+                checked={filters.editedOnly}
+                onChange={(e) => setFilters((f) => ({ ...f, editedOnly: e.target.checked }))}
+                className="h-5 w-5 accent-[var(--primary)]"
+              />
+              <span className="text-sm font-semibold">Só pedidos editados</span>
+            </label>
+          </section>
+
+          <div
+            role="group"
+            aria-label="Visualização"
+            className="mb-5 inline-flex rounded-full border-2 border-foreground bg-card p-1"
+          >
+            {(
+              [
+                ["participants", "Por participante"],
+                ["totals", "Consolidado"],
+              ] as const
+            ).map(([v, label]) => (
+              <button
+                key={v}
+                aria-pressed={view === v}
+                onClick={() => setView(v)}
+                className={`min-h-10 rounded-full px-4 text-sm font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${view === v ? "bg-primary text-primary-foreground" : ""}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {filtering && (
+            <p className="mb-3 text-sm text-muted-foreground">
+              {filtered.length} de {orders.length} pedido(s)
+            </p>
+          )}
+
+          {filtered.length === 0 ? (
+            <div className="pop-card p-8 text-center">
+              <h2 className="text-3xl">Nenhum pedido com esses filtros</h2>
+              <button className={`${btnPlain} mt-4`} onClick={() => setFilters(emptyFilters)}>
+                Limpar filtros
+              </button>
+            </div>
+          ) : view === "participants" ? (
+            <ul className="grid gap-4 md:grid-cols-2">
+              {filtered.map((o, i) => (
+                <ParticipantCard
+                  key={o.order_id}
+                  order={o}
+                  index={i}
+                  onReset={() => setResetFor(o)}
+                />
+              ))}
+            </ul>
+          ) : (
+            <div className="space-y-4">
+              {totals.map((c) => (
+                <section
+                  key={c.category ?? NO_CATEGORY}
+                  aria-label={c.category ?? "Sem categoria"}
+                  className="pop-card p-4"
+                >
+                  <div className="flex items-baseline justify-between">
+                    <h2 className="text-3xl">{c.category ?? "Sem categoria"}</h2>
+                    <span className="text-sm font-bold text-muted-foreground">
+                      {c.quantity} no total
+                    </span>
+                  </div>
+                  <ul className="mt-3 space-y-3">
+                    {c.products.map((p) => (
+                      <li key={p.product_id}>
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="font-semibold">{p.product}</span>
+                          <span className="font-display text-3xl">{p.quantity}</span>
+                        </div>
+                        <div className="mt-1 h-2 overflow-hidden rounded-full bg-muted" aria-hidden>
+                          <motion.div
+                            className="h-full origin-left rounded-full bg-primary"
+                            initial={{ scaleX: 0 }}
+                            animate={{ scaleX: p.quantity / (c.products[0]?.quantity || 1) }}
+                            transition={{ duration: 0.5 }}
+                          />
+                        </div>
+                        <p className="mt-1 text-xs text-muted-foreground">{p.people.join(", ")}</p>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+
+      <ResetCodeFlow order={resetFor} onClose={() => setResetFor(null)} />
+    </div>
+  );
+}
+
+function ParticipantCard({
+  order: o,
+  index,
+  onReset,
+}: {
+  order: RoundOrder;
+  index: number;
+  onReset: () => void;
+}) {
+  const reduce = useReducedMotion();
+  const groups = groupByCategory(o.items);
+  return (
+    <motion.li
+      initial={reduce ? false : { opacity: 0, y: 14 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: Math.min(index * 0.03, 0.25) }}
+      className="pop-card p-4"
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <h3 className="truncate text-3xl">{o.participant}</h3>
+          <p className="text-sm text-muted-foreground">{o.phone ?? "Sem celular"}</p>
+        </div>
+        {o.edited && (
+          <span
+            className="inline-flex shrink-0 items-center gap-1 rounded-full border-2 border-foreground bg-accent px-2.5 py-0.5 text-xs font-bold text-accent-foreground"
+            title="Pedido alterado depois de confirmado"
+          >
+            <Pencil className="h-3 w-3" aria-hidden /> Editado {formatSaoPauloTime(o.updated_at)}
+          </span>
+        )}
+      </div>
+      <div className="mt-3 space-y-2">
+        {groups.map((g) => (
+          <div key={g.category ?? NO_CATEGORY}>
+            <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
+              {g.category ?? "Sem categoria"}
+            </p>
+            <ul className="text-sm">
+              {g.items.map((it) => (
+                <li key={it.product_id} className="flex justify-between gap-2 py-0.5">
+                  <span>{it.product}</span>
+                  <span className="font-bold">{it.quantity}x</span>
                 </li>
               ))}
             </ul>
-          </section>
-
-          <h2 className="mb-3 text-3xl">Por participante</h2>
-          <ul className="grid gap-4 sm:grid-cols-2">
-            {orders.map((o, i) => (
-              <motion.li
-                key={o.order_id}
-                initial={{ opacity: 0, y: 16 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: Math.min(i * 0.04, 0.3) }}
-                className="pop-card p-4"
-              >
-                <h3 className="text-3xl">{o.participant}</h3>
-                <ul className="mt-2 space-y-1 text-sm">
-                  {o.items.map((it) => (
-                    <li key={it.product_id} className="flex justify-between gap-2">
-                      <span>{it.product}</span>
-                      <span className="font-bold">{it.quantity}x</span>
-                    </li>
-                  ))}
-                </ul>
-              </motion.li>
-            ))}
-          </ul>
-        </>
+          </div>
+        ))}
+      </div>
+      {o.phone && (
+        <button
+          onClick={onReset}
+          className="mt-3 inline-flex min-h-10 items-center gap-1.5 text-sm font-semibold underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <KeyRound className="h-4 w-4" aria-hidden /> Redefinir código de recuperação
+        </button>
       )}
-    </div>
+    </motion.li>
+  );
+}
+
+/** Confirma, gera o código novo e o mostra uma única vez para o organizador repassar. */
+function ResetCodeFlow({ order, onClose }: { order: RoundOrder | null; onClose: () => void }) {
+  const reset = useServerFn(resetParticipantCode);
+  const [code, setCode] = useState<string | null>(null);
+  const [name, setName] = useState("");
+  const [copied, setCopied] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  useEffect(() => setConfirmOpen(order !== null), [order]);
+
+  const generate = async () => {
+    if (!order) return;
+    setConfirmOpen(false);
+    try {
+      const r = await reset({ data: { participantId: order.participant_id } });
+      setName(order.participant);
+      setCode(r.code);
+    } catch (e) {
+      toast.error(errMsg(e));
+      onClose();
+    }
+  };
+  const done = () => {
+    setCode(null);
+    setCopied(false);
+    onClose();
+  };
+
+  return (
+    <>
+      <ConfirmDialog
+        open={confirmOpen}
+        onOpenChange={(o) => {
+          setConfirmOpen(o);
+          if (!o && code === null) onClose();
+        }}
+        title={`Redefinir o código de ${order?.participant ?? ""}?`}
+        description="O código atual deixa de funcionar. Confirme que é mesmo a pessoa (por exemplo, ligando para o celular dela) antes de passar o novo código."
+        confirmLabel="Gerar novo código"
+        onConfirm={() => void generate()}
+      />
+      <Dialog open={code !== null} onOpenChange={(o) => !o && done()}>
+        <DialogContent className="rounded-3xl border-2 border-foreground bg-background shadow-pop-lg">
+          <DialogHeader>
+            <DialogTitle className="font-display text-4xl font-normal">
+              Novo código de {name}
+            </DialogTitle>
+            <DialogDescription>
+              Ele só aparece agora. Passe para a pessoa e peça que o guarde.
+            </DialogDescription>
+          </DialogHeader>
+          <p className="select-all rounded-2xl border-2 border-dashed border-foreground bg-accent px-4 py-5 text-center font-mono text-3xl font-bold tracking-widest text-accent-foreground">
+            {code}
+          </p>
+          <div className="flex gap-2">
+            <button
+              className={`${btnPlain} flex-1`}
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(code ?? "");
+                  setCopied(true);
+                } catch {
+                  toast.error("Não foi possível copiar. Anote o código.");
+                }
+              }}
+            >
+              {copied ? (
+                <Check className="h-4 w-4" aria-hidden />
+              ) : (
+                <Copy className="h-4 w-4" aria-hidden />
+              )}{" "}
+              {copied ? "Copiado!" : "Copiar"}
+            </button>
+            <button className={`${btnPrimary} flex-1`} onClick={done}>
+              Pronto
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
