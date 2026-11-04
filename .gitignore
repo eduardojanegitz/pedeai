@@ -32,3 +32,7 @@ dist-ssr
 *.sw?
 
 .env
+.vercel
+
+# O lockfile do projeto é o bun.lock
+package-lock.json
