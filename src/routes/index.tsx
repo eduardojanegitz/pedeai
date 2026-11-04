@@ -103,6 +103,19 @@ function Index() {
       </Shell>
     );
   }
+  if (round.data.state !== "open") {
+    // Tela provisória; os estados "aguardando abertura" e "encerrado" ganham design próprio no bloco 4.
+    return (
+      <Shell>
+        <h1 className="text-5xl text-primary">{round.data.state === "waiting" ? "Já já abre!" : "Pedidos encerrados"}</h1>
+        <p className="mt-4 text-muted-foreground">
+          {round.data.state === "waiting"
+            ? "O cardápio ainda não abriu para pedidos."
+            : "Os pedidos desta rodada já foram encerrados."}
+        </p>
+      </Shell>
+    );
+  }
   return <Participant round={round.data} />;
 }
 
@@ -224,13 +237,18 @@ function Menu({
 
   const refreshMine = () => qc.invalidateQueries({ queryKey: ["my-order"] });
 
-  const setQty = (id: string, q: number) =>
+  // Chave de reenvio: mantida enquanto o carrinho não muda, para um retry após falha de rede não duplicar.
+  const requestId = useRef<string | null>(null);
+
+  const setQty = (id: string, q: number) => {
+    requestId.current = null;
     setCart((c) => {
       const n = { ...c };
       if (q <= 0) delete n[id];
       else n[id] = Math.min(99, q);
       return n;
     });
+  };
 
   const add = (p: CatalogProduct, el: HTMLElement) => {
     setQty(p.id, (cart[p.id] ?? 0) + 1);
@@ -256,9 +274,22 @@ function Menu({
   const confirm = async () => {
     setBusy(true);
     try {
-      await submit({
-        data: { token, roundId: round.id, items: lines.map(([product_id, quantity]) => ({ product_id, quantity })) },
+      requestId.current ??= crypto.randomUUID();
+      const res = await submit({
+        data: {
+          token,
+          roundId: round.id,
+          expectedVersion: me.version,
+          requestId: requestId.current,
+          items: lines.map(([product_id, quantity]) => ({ product_id, quantity })),
+        },
       });
+      if (!res.ok) {
+        requestId.current = null;
+        if (res.code === "VERSION_CONFLICT") refreshMine();
+        throw new Error(res.message);
+      }
+      requestId.current = null;
       setOpen(false);
       setEditing(false);
       setCelebrate(true);

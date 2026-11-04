@@ -1,5 +1,4 @@
 import { createMiddleware } from "@tanstack/react-start";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
 /**
@@ -11,8 +10,7 @@ export const requireAdmin = createMiddleware({ type: "function" })
   .middleware([requireSupabaseAuth])
   .server(async ({ next, context }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    // `admins` entra nos tipos gerados só depois da migração; por isso o client sem schema tipado.
-    const db = supabaseAdmin as unknown as SupabaseClient;
+    const db = supabaseAdmin;
     const { data, error } = await db
       .from("admins")
       .select("user_id")
