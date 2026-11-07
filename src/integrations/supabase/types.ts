@@ -196,6 +196,7 @@ export type Database = {
       };
       orders: {
         Row: {
+          done_at: string | null;
           last_request_id: string | null;
           paid_at: string | null;
           paid_by: string | null;
@@ -208,6 +209,7 @@ export type Database = {
           updated_at: string;
         };
         Insert: {
+          done_at?: string | null;
           last_request_id?: string | null;
           paid_at?: string | null;
           paid_by?: string | null;
@@ -220,6 +222,7 @@ export type Database = {
           updated_at?: string;
         };
         Update: {
+          done_at?: string | null;
           last_request_id?: string | null;
           paid_at?: string | null;
           paid_by?: string | null;

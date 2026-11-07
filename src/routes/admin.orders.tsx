@@ -17,6 +17,7 @@ import {
   Search,
   Share2,
   Store,
+  CheckCircle2,
   BadgeCheck,
   Undo2,
 } from "lucide-react";
@@ -608,6 +609,13 @@ function ParticipantCard({
             </p>
           )}
         </div>
+      )}
+      {o.done_at && (
+        <p className="mt-2 inline-flex items-center gap-1.5 rounded-full border-2 border-foreground bg-secondary px-2.5 py-0.5 text-xs font-bold text-secondary-foreground">
+          <CheckCircle2 className="h-3 w-3" aria-hidden /> Concluído pelo estabelecimento{" "}
+          {formatSaoPauloTime(o.done_at)}
+          {Date.parse(o.updated_at) > Date.parse(o.done_at) && " · mudou depois"}
+        </p>
       )}
       {afterPrint && (
         <p className="mt-2 inline-flex items-center gap-1.5 rounded-full border-2 border-foreground px-2.5 py-0.5 text-xs font-bold">

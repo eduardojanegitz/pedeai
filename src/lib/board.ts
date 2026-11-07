@@ -10,6 +10,8 @@ export type BoardOrder = {
   status: "confirmed" | "cancelled";
   created_at: string;
   updated_at: string;
+  /** Quando o estabelecimento marcou como concluído (null = pendente). */
+  done_at: string | null;
   items: {
     product_id: string;
     product: string;
@@ -58,6 +60,7 @@ export function boardToRoundOrders(orders: BoardOrder[]): RoundOrder[] {
       updated_at: o.updated_at,
       edited: o.version > 1,
       paid_at: null,
+      done_at: o.done_at,
       items: o.items.map((i) => ({ ...i, price_cents: null })),
     }));
 }

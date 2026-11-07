@@ -22,6 +22,14 @@ const createBoardLink = vi.fn(async (_: unknown) => ({
 }));
 const listBoardLinks = vi.fn(async (_: unknown): Promise<BoardLink[]> => []);
 const revokeBoardLink = vi.fn(async (_: unknown) => ({ ok: true }));
+type DoneResult =
+  | { ok: true; doneAt: string | null }
+  | { ok: false; status: "invalid" | "expired" | "revoked" | "rate_limited" | "not_found" };
+const setBoardOrderDone = vi.fn(async (_: unknown): Promise<DoneResult> => ({
+  ok: true,
+  doneAt: "2026-11-06T13:30:00.000Z",
+}));
+const toastError = vi.fn();
 const copy = vi.fn(async (_: string) => {});
 const playChime = vi.fn(() => true);
 const unlockSound = vi.fn(async () => true);
@@ -32,6 +40,7 @@ vi.mock("@/lib/board.functions", () => ({
   createBoardLink: (a: unknown) => createBoardLink(a),
   listBoardLinks: (a: unknown) => listBoardLinks(a),
   revokeBoardLink: (a: unknown) => revokeBoardLink(a),
+  setBoardOrderDone: (a: unknown) => setBoardOrderDone(a),
 }));
 vi.mock("@/lib/clipboard", () => ({ copyToClipboard: (t: string) => copy(t) }));
 vi.mock("@/features/admin/chime", () => ({
@@ -40,7 +49,9 @@ vi.mock("@/features/admin/chime", () => ({
   soundReady: () => true,
   soundSupported: () => true,
 }));
-vi.mock("sonner", () => ({ toast: Object.assign(vi.fn(), { error: vi.fn(), success: vi.fn() }) }));
+vi.mock("sonner", () => ({
+  toast: Object.assign(vi.fn(), { error: (m: string) => toastError(m), success: vi.fn() }),
+}));
 
 import { BoardLinkDialog } from "@/features/admin/BoardLinkDialog";
 import { BoardPage } from "@/features/board/BoardPage";
@@ -61,6 +72,7 @@ describe("lógica do link do estabelecimento", () => {
     status,
     created_at: "2026-11-06T12:00:00Z",
     updated_at: "2026-11-06T12:10:00Z",
+    done_at: null,
     items:
       status === "cancelled"
         ? []
@@ -116,13 +128,21 @@ const board = (
     orders,
   },
 });
-const order = (id: string, name: string, items: BoardOrder["items"], version = 1): BoardOrder => ({
+const order = (
+  id: string,
+  name: string,
+  items: BoardOrder["items"],
+  version = 1,
+  done_at: string | null = null,
+  updated_at = "2026-11-06T12:00:00Z",
+): BoardOrder => ({
   id,
   name,
   version,
   status: "confirmed",
   created_at: "2026-11-06T12:00:00Z",
-  updated_at: "2026-11-06T12:00:00Z",
+  updated_at,
+  done_at,
   items,
 });
 const item = (product: string, qty = 1, note: string | null = null, category = "Prato") => ({
@@ -341,5 +361,140 @@ describe("janela do organizador", () => {
   it("avisa quando o endereço só funciona neste computador", () => {
     wrap(); // jsdom roda em localhost
     expect(screen.getByText(/só funciona neste computador/)).toBeTruthy();
+  });
+});
+
+describe("concluir pedidos na comanda ao vivo", () => {
+  const two = () =>
+    board([order("1", "João S.", [item("Frango")]), order("2", "Maria", [item("Lasanha")])]);
+
+  beforeEach(() => {
+    getSharedBoard.mockReset();
+    setBoardOrderDone.mockReset();
+    setBoardOrderDone.mockResolvedValue({ ok: true, doneAt: "2026-11-06T13:30:00.000Z" });
+    toastError.mockClear();
+  });
+
+  const openPeople = async () => {
+    const client = renderPage();
+    await screen.findByRole("heading", { name: "Almoço" });
+    fireEvent.click(screen.getByRole("button", { name: "Por pessoa" }));
+    return client;
+  };
+
+  it("mostra 0/2 e um botão por pedido; concluir atualiza na hora e envia ao servidor", async () => {
+    getSharedBoard.mockResolvedValue(two());
+    await openPeople();
+    expect(screen.getByText("Concluídos")).toBeTruthy();
+    expect(screen.getByText("/2")).toBeTruthy();
+    const joao = screen.getByRole("listitem", { name: "João S." });
+    fireEvent.click(within(joao).getByRole("button", { name: /Marcar como concluído/ }));
+    await waitFor(() =>
+      expect(setBoardOrderDone).toHaveBeenCalledWith({
+        data: { token: TOKEN, orderId: "1", done: true },
+      }),
+    );
+    expect(
+      await within(joao).findByRole("button", { name: /Concluído às .* desfazer/ }),
+    ).toBeTruthy();
+    expect(within(joao).getByText("Concluído")).toBeTruthy();
+    const maria = screen.getByRole("listitem", { name: "Maria" });
+    expect(within(maria).getByRole("button", { name: /Marcar como concluído/ })).toBeTruthy();
+  });
+
+  it("desfazer manda done:false", async () => {
+    getSharedBoard.mockResolvedValue(
+      board([order("1", "João S.", [item("Frango")], 1, "2026-11-06T12:30:00Z")]),
+    );
+    setBoardOrderDone.mockResolvedValue({ ok: true, doneAt: null });
+    await openPeople();
+    fireEvent.click(screen.getByRole("button", { name: /desfazer/ }));
+    await waitFor(() =>
+      expect(setBoardOrderDone).toHaveBeenCalledWith({
+        data: { token: TOKEN, orderId: "1", done: false },
+      }),
+    );
+    expect(await screen.findByRole("button", { name: /Marcar como concluído/ })).toBeTruthy();
+  });
+
+  it("falha de rede: volta atrás e avisa", async () => {
+    getSharedBoard.mockResolvedValue(two());
+    setBoardOrderDone.mockRejectedValueOnce(new Error("rede"));
+    await openPeople();
+    const joao = screen.getByRole("listitem", { name: "João S." });
+    fireEvent.click(within(joao).getByRole("button", { name: /Marcar como concluído/ }));
+    await waitFor(() => expect(toastError).toHaveBeenCalled());
+    expect(within(joao).getByRole("button", { name: /Marcar como concluído/ })).toBeTruthy();
+  });
+
+  it("link revogado no meio do caminho: mostra a tela de link revogado", async () => {
+    getSharedBoard.mockResolvedValue(two());
+    setBoardOrderDone.mockResolvedValueOnce({ ok: false, status: "revoked" });
+    await openPeople();
+    const joao = screen.getByRole("listitem", { name: "João S." });
+    fireEvent.click(within(joao).getByRole("button", { name: /Marcar como concluído/ }));
+    expect(await screen.findByText("Link revogado")).toBeTruthy();
+  });
+
+  it("pedido que sumiu (cancelado): avisa e recarrega a comanda", async () => {
+    getSharedBoard.mockResolvedValue(two());
+    setBoardOrderDone.mockResolvedValueOnce({ ok: false, status: "not_found" });
+    await openPeople();
+    const before = getSharedBoard.mock.calls.length;
+    fireEvent.click(
+      within(screen.getByRole("listitem", { name: "João S." })).getByRole("button", {
+        name: /Marcar como concluído/,
+      }),
+    );
+    await waitFor(() => expect(toastError).toHaveBeenCalled());
+    await waitFor(() => expect(getSharedBoard.mock.calls.length).toBeGreaterThan(before));
+  });
+
+  it("'Só pendentes' esconde os concluídos nos totais e por pessoa", async () => {
+    getSharedBoard.mockResolvedValue(
+      board([
+        order("1", "João S.", [item("Frango")], 1, "2026-11-06T12:30:00Z"),
+        order("2", "Maria", [item("Lasanha")]),
+      ]),
+    );
+    renderPage();
+    await screen.findByRole("heading", { name: "Almoço" });
+    const prato = () => screen.getByRole("region", { name: "Prato" });
+    expect(within(prato()).getByText("Frango")).toBeTruthy();
+    fireEvent.click(screen.getByLabelText("Só pendentes"));
+    expect(within(prato()).queryByText("Frango")).toBeNull();
+    expect(within(prato()).getByText("Lasanha")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Por pessoa" }));
+    expect(screen.queryByRole("listitem", { name: "João S." })).toBeNull();
+    expect(screen.getByRole("listitem", { name: "Maria" })).toBeTruthy();
+  });
+
+  it("tudo concluído com o filtro ligado: mensagem de parabéns", async () => {
+    getSharedBoard.mockResolvedValue(
+      board([order("1", "João S.", [item("Frango")], 1, "2026-11-06T12:30:00Z")]),
+    );
+    renderPage();
+    await screen.findByRole("heading", { name: "Almoço" });
+    fireEvent.click(screen.getByLabelText("Só pendentes"));
+    expect(screen.getByText("Tudo concluído!")).toBeTruthy();
+  });
+
+  it("pedido editado depois de concluído: avisa para conferir", async () => {
+    getSharedBoard.mockResolvedValue(
+      board([
+        order("1", "João S.", [item("Frango")], 2, "2026-11-06T12:30:00Z", "2026-11-06T12:45:00Z"),
+      ]),
+    );
+    await openPeople();
+    expect(screen.getByRole("alert").textContent).toContain("mudou depois de concluído");
+  });
+});
+
+describe("botões claros dentro de caixas coloridas", () => {
+  it("btnPlain define a cor do texto (antes herdava o branco da caixa azul e sumia)", async () => {
+    const admin = await import("@/features/admin/ui");
+    const participant = await import("@/features/order/ui");
+    expect(admin.btnPlain).toContain("text-foreground");
+    expect(participant.btnPlain).toContain("text-foreground");
   });
 });

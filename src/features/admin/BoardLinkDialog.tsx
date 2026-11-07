@@ -119,7 +119,8 @@ export function BoardLinkDialog({
             </DialogTitle>
             <DialogDescription>
               Uma página só de leitura, sem login, com os pedidos ao vivo, alerta sonoro e botão de
-              imprimir a comanda. Não mostra celular, valores nem pagamentos.
+              imprimir a comanda e marcar cada pedido como concluído. Não mostra celular, valores
+              nem pagamentos.
             </DialogDescription>
           </DialogHeader>
 

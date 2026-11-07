@@ -512,6 +512,8 @@ export type RoundOrder = {
   edited: boolean;
   /** Quando o organizador marcou como pago (null = pendente). */
   paid_at: string | null;
+  /** Quando o estabelecimento marcou como concluído na comanda ao vivo (null/ausente = pendente). */
+  done_at?: string | null;
   items: RoundOrderItem[];
 };
 
@@ -523,7 +525,7 @@ export const getRoundOrders = createServerFn({ method: "GET" })
     const { data: rows, error } = await db
       .from("orders")
       .select(
-        "id, created_at, updated_at, version, paid_at, participant_id, participants(display_name, phone_e164), order_items(quantity, note, product_id, products(name, price_cents, categories(name, position)))",
+        "id, created_at, updated_at, version, paid_at, done_at, participant_id, participants(display_name, phone_e164), order_items(quantity, note, product_id, products(name, price_cents, categories(name, position)))",
       )
       .eq("round_id", data.roundId)
       .eq("status", "confirmed")
@@ -535,6 +537,7 @@ export const getRoundOrders = createServerFn({ method: "GET" })
       updated_at: string;
       version: number;
       paid_at: string | null;
+      done_at: string | null;
       participant_id: string;
       participants: { display_name: string; phone_e164: string | null } | null;
       order_items: {
@@ -557,6 +560,7 @@ export const getRoundOrders = createServerFn({ method: "GET" })
       updated_at: o.updated_at,
       edited: o.version > 1,
       paid_at: o.paid_at,
+      done_at: o.done_at,
       items: o.order_items
         .map((i) => ({
           product_id: i.product_id,

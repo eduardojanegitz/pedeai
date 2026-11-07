@@ -1,6 +1,7 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
-import { Bell, BellOff, Check, Clock, Pencil, WifiOff } from "lucide-react";
+import { Bell, BellOff, Check, CheckCircle2, Clock, Pencil, Undo2, WifiOff } from "lucide-react";
+import { toast } from "sonner";
 import { Logo } from "@/components/brand/Logo";
 import {
   consolidate,
@@ -8,8 +9,8 @@ import {
   NO_CATEGORY,
   summarize,
 } from "@/features/admin/orders-logic";
-import { boardToRoundOrders, type SharedBoard } from "@/lib/board";
-import { getSharedBoard } from "@/lib/board.functions";
+import { boardToRoundOrders, type SharedBoard, type SharedBoardResult } from "@/lib/board";
+import { getSharedBoard, setBoardOrderDone } from "@/lib/board.functions";
 import { formatSaoPauloTime } from "@/lib/format";
 import type { RoundState } from "@/lib/orders.functions";
 import { BoardPrint } from "./BoardPrint";
@@ -66,9 +67,50 @@ export function BoardPage({ token }: { token: string }) {
     retry: false,
   });
 
+  const qc = useQueryClient();
   const result = q.data;
   const board = result?.status === "ok" ? result.board : undefined;
   const alerts = useBoardAlerts(board?.orders);
+
+  /** Marca/desmarca "concluído": aparece na hora e volta atrás se o servidor recusar. */
+  const toggleDone = async (orderId: string, done: boolean) => {
+    const key = ["board", token];
+    const patch = (doneAt: string | null) =>
+      qc.setQueryData<SharedBoardResult>(key, (old) =>
+        old?.status === "ok"
+          ? {
+              ...old,
+              board: {
+                ...old.board,
+                orders: old.board.orders.map((o) =>
+                  o.id === orderId ? { ...o, done_at: doneAt } : o,
+                ),
+              },
+            }
+          : old,
+      );
+    const previous = qc.getQueryData<SharedBoardResult>(key);
+    patch(done ? new Date().toISOString() : null);
+    try {
+      const r = await setBoardOrderDone({ data: { token, orderId, done } });
+      if (r.ok) {
+        patch(r.doneAt);
+        return;
+      }
+      if (r.status === "not_found") {
+        toast.error("Este pedido não está mais na comanda (pode ter sido cancelado).");
+        void qc.invalidateQueries({ queryKey: key });
+      } else if (r.status === "rate_limited") {
+        toast.error("Muitas ações seguidas. Aguarde um instante.");
+        qc.setQueryData(key, previous);
+      } else {
+        qc.setQueryData<SharedBoardResult>(key, { status: r.status });
+      }
+    } catch {
+      toast.error("Não foi possível marcar. Confira a conexão e tente de novo.");
+      qc.setQueryData(key, previous);
+    }
+  };
 
   if (!result) {
     if (q.isError)
@@ -82,7 +124,13 @@ export function BoardPage({ token }: { token: string }) {
     return <Screen title={m.title} text={m.text} />;
   }
   return (
-    <Board board={result.board} offline={q.isError} alerts={alerts} updatedAt={q.dataUpdatedAt} />
+    <Board
+      board={result.board}
+      offline={q.isError}
+      alerts={alerts}
+      updatedAt={q.dataUpdatedAt}
+      onToggleDone={(id, done) => void toggleDone(id, done)}
+    />
   );
 }
 
@@ -93,16 +141,25 @@ function Board({
   offline,
   alerts,
   updatedAt,
+  onToggleDone,
 }: {
   board: SharedBoard;
   offline: boolean;
   alerts: ReturnType<typeof useBoardAlerts>;
   updatedAt: number;
+  onToggleDone: (orderId: string, done: boolean) => void;
 }) {
   const [view, setView] = useState<View>("totals");
+  const [onlyPending, setOnlyPending] = useState(false);
   const orders = useMemo(() => boardToRoundOrders(board.orders), [board.orders]);
   const stats = summarize(orders);
-  const totals = useMemo(() => consolidate(orders), [orders]);
+  const doneCount = orders.filter((o) => o.done_at).length;
+  // "Só pendentes": o que ainda falta fazer (vale para os totais e para a visão por pessoa).
+  const shown = useMemo(
+    () => (onlyPending ? orders.filter((o) => !o.done_at) : orders),
+    [orders, onlyPending],
+  );
+  const totals = useMemo(() => consolidate(shown), [shown]);
   const state = STATE[board.state];
 
   return (
@@ -191,7 +248,7 @@ function Board({
         </div>
       )}
 
-      <div className="mt-5 grid grid-cols-2 gap-4">
+      <div className="mt-5 grid grid-cols-3 gap-3 sm:gap-4">
         <div className="pop-card bg-secondary p-4 text-secondary-foreground">
           <p className="text-xs font-bold uppercase tracking-widest">Pedidos</p>
           <p className="font-display text-5xl leading-none">{stats.orders}</p>
@@ -200,35 +257,63 @@ function Board({
           <p className="text-xs font-bold uppercase tracking-widest">Itens</p>
           <p className="font-display text-5xl leading-none">{stats.items}</p>
         </div>
+        <div className="pop-card bg-card p-4">
+          <p className="text-xs font-bold uppercase tracking-widest">Concluídos</p>
+          <p className="font-display text-5xl leading-none">
+            {doneCount}
+            <span className="text-3xl text-muted-foreground">/{stats.orders}</span>
+          </p>
+        </div>
       </div>
 
-      <div
-        role="group"
-        aria-label="Visualização"
-        className="mb-5 mt-5 inline-flex rounded-full border-2 border-foreground bg-card p-1"
-      >
-        {(
-          [
-            ["totals", "Totais"],
-            ["people", "Por pessoa"],
-          ] as const
-        ).map(([v, label]) => (
-          <button
-            key={v}
-            type="button"
-            aria-pressed={view === v}
-            onClick={() => setView(v)}
-            className={`min-h-10 rounded-full px-4 text-sm font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${view === v ? "bg-primary text-primary-foreground" : ""}`}
-          >
-            {label}
-          </button>
-        ))}
+      <div className="mb-5 mt-5 flex flex-wrap items-center gap-3">
+        <div
+          role="group"
+          aria-label="Visualização"
+          className="inline-flex rounded-full border-2 border-foreground bg-card p-1"
+        >
+          {(
+            [
+              ["totals", "Totais"],
+              ["people", "Por pessoa"],
+            ] as const
+          ).map(([v, label]) => (
+            <button
+              key={v}
+              type="button"
+              aria-pressed={view === v}
+              onClick={() => setView(v)}
+              className={`min-h-10 rounded-full px-4 text-sm font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${view === v ? "bg-primary text-primary-foreground" : ""}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {orders.length > 0 && (
+          <label className="inline-flex min-h-11 cursor-pointer items-center gap-3 rounded-2xl border-2 border-foreground bg-card px-4">
+            <input
+              type="checkbox"
+              checked={onlyPending}
+              onChange={(e) => setOnlyPending(e.target.checked)}
+              className="h-5 w-5 accent-[var(--primary)]"
+            />
+            <span className="text-sm font-semibold">Só pendentes</span>
+          </label>
+        )}
       </div>
 
       {orders.length === 0 ? (
         <div className="pop-card p-10 text-center">
           <h2 className="text-4xl">Nenhum pedido ainda</h2>
           <p className="mt-2 text-muted-foreground">Os pedidos aparecem aqui assim que chegarem.</p>
+        </div>
+      ) : shown.length === 0 ? (
+        <div className="pop-card p-10 text-center">
+          <h2 className="text-4xl">Tudo concluído!</h2>
+          <p className="mt-2 text-muted-foreground">
+            Não há pedidos pendentes. Desmarque o filtro para ver todos.
+          </p>
         </div>
       ) : view === "totals" ? (
         <div className="space-y-4">
@@ -269,18 +354,24 @@ function Board({
         </div>
       ) : (
         <ul className="grid gap-4 md:grid-cols-2">
-          {orders.map((o) => (
+          {shown.map((o) => (
             <li
               key={o.order_id}
               aria-label={o.participant}
-              className={`pop-card p-4 ${alerts.newIds.has(o.order_id) ? "ring-4 ring-primary/50" : ""}`}
+              className={`pop-card p-4 ${o.done_at ? "bg-muted/60" : ""} ${alerts.newIds.has(o.order_id) ? "ring-4 ring-primary/50" : ""}`}
             >
               <div className="flex items-start justify-between gap-2">
                 <h3 className="min-w-0 break-words text-3xl">{o.participant}</h3>
-                {alerts.newIds.has(o.order_id) && (
-                  <span className="shrink-0 rounded-full bg-primary px-2.5 py-0.5 text-xs font-bold uppercase tracking-wider text-primary-foreground">
-                    {o.edited ? "Alterado" : "Novo"}
+                {o.done_at ? (
+                  <span className="inline-flex shrink-0 items-center gap-1 rounded-full border-2 border-foreground bg-card px-2.5 py-0.5 text-xs font-bold uppercase tracking-wider">
+                    <CheckCircle2 className="h-3 w-3" aria-hidden /> Concluído
                   </span>
+                ) : (
+                  alerts.newIds.has(o.order_id) && (
+                    <span className="shrink-0 rounded-full bg-primary px-2.5 py-0.5 text-xs font-bold uppercase tracking-wider text-primary-foreground">
+                      {o.edited ? "Alterado" : "Novo"}
+                    </span>
+                  )
                 )}
               </div>
               {o.edited && (
@@ -311,6 +402,29 @@ function Board({
                   </div>
                 ))}
               </div>
+
+              {o.done_at && Date.parse(o.updated_at) > Date.parse(o.done_at) && (
+                <p role="alert" className="mt-3 text-xs font-bold text-destructive">
+                  O pedido mudou depois de concluído: confira as alterações e conclua de novo.
+                </p>
+              )}
+              <button
+                type="button"
+                aria-pressed={!!o.done_at}
+                onClick={() => onToggleDone(o.order_id, !o.done_at)}
+                className={`pop-press mt-3 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full border-2 border-foreground px-4 py-2 text-sm font-bold shadow-pop focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${o.done_at ? "bg-card text-foreground" : "bg-primary text-primary-foreground"}`}
+              >
+                {o.done_at ? (
+                  <>
+                    <Undo2 className="h-4 w-4" aria-hidden /> Concluído às{" "}
+                    {formatSaoPauloTime(o.done_at)} · desfazer
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="h-4 w-4" aria-hidden /> Marcar como concluído
+                  </>
+                )}
+              </button>
             </li>
           ))}
         </ul>

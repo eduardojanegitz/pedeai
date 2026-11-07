@@ -20,6 +20,28 @@ function newToken(): string {
 
 const MAX_ACTIVE_LINKS = 10;
 
+type Db = Awaited<ReturnType<typeof admin>>;
+type LinkLookup =
+  { ok: true; roundId: string } | { ok: false; status: "invalid" | "expired" | "revoked" };
+
+/** Token → rodada, se o link existe, não foi revogado e não expirou. */
+async function resolveLink(
+  db: Db,
+  sha256Hex: (t: string) => Promise<string>,
+  token: string,
+): Promise<LinkLookup> {
+  if (!isBoardToken(token)) return { ok: false, status: "invalid" };
+  const { data: link } = await db
+    .from("board_links")
+    .select("round_id, expires_at, revoked_at")
+    .eq("token_hash", await sha256Hex(token))
+    .maybeSingle();
+  if (!link) return { ok: false, status: "invalid" };
+  if (link.revoked_at) return { ok: false, status: "revoked" };
+  if (Date.parse(link.expires_at) <= Date.now()) return { ok: false, status: "expired" };
+  return { ok: true, roundId: link.round_id };
+}
+
 export type BoardLink = {
   id: string;
   createdAt: string;
@@ -118,29 +140,21 @@ export const getSharedBoard = createServerFn({ method: "POST" })
   // Formato fora do padrão (ex.: link cortado ao colar) não é erro de servidor: é "link inválido".
   .validator((d: unknown) => z.object({ token: z.string().max(200) }).parse(d))
   .handler(async ({ data }): Promise<SharedBoardResult> => {
-    if (!isBoardToken(data.token)) return { status: "invalid" };
     const db = await admin();
     const sec = await import("@/lib/participant-security.server");
     if (!(await sec.withinRateLimit(db, "board", 180, 60))) return { status: "rate_limited" };
-
-    const { data: link } = await db
-      .from("board_links")
-      .select("round_id, expires_at, revoked_at")
-      .eq("token_hash", await sec.sha256Hex(data.token))
-      .maybeSingle();
-    if (!link) return { status: "invalid" };
-    if (link.revoked_at) return { status: "revoked" };
-    if (Date.parse(link.expires_at) <= Date.now()) return { status: "expired" };
+    const link = await resolveLink(db, sec.sha256Hex, data.token);
+    if (!link.ok) return { status: link.status };
 
     const [{ data: round }, { data: state }, { data: rows, error }] = await Promise.all([
-      db.from("rounds").select("name, closes_at").eq("id", link.round_id).maybeSingle(),
-      db.rpc("get_round_state", { p_round: link.round_id }),
+      db.from("rounds").select("name, closes_at").eq("id", link.roundId).maybeSingle(),
+      db.rpc("get_round_state", { p_round: link.roundId }),
       db
         .from("orders")
         .select(
-          "id, version, status, created_at, updated_at, participants(display_name), order_items(quantity, note, product_id, products(name, categories(name, position)))",
+          "id, version, status, created_at, updated_at, done_at, participants(display_name), order_items(quantity, note, product_id, products(name, categories(name, position)))",
         )
-        .eq("round_id", link.round_id)
+        .eq("round_id", link.roundId)
         .order("created_at")
         .limit(1000),
     ]);
@@ -152,6 +166,7 @@ export const getSharedBoard = createServerFn({ method: "POST" })
       status: string;
       created_at: string;
       updated_at: string;
+      done_at: string | null;
       participants: { display_name: string } | null;
       order_items: {
         quantity: number;
@@ -169,6 +184,7 @@ export const getSharedBoard = createServerFn({ method: "POST" })
         status: cancelled ? "cancelled" : "confirmed",
         created_at: o.created_at,
         updated_at: o.updated_at,
+        done_at: cancelled ? null : o.done_at,
         items: cancelled
           ? []
           : o.order_items
@@ -198,3 +214,40 @@ export const getSharedBoard = createServerFn({ method: "POST" })
       },
     };
   });
+
+/**
+ * Marca (ou desmarca) um pedido como concluído, pela comanda ao vivo. A autorização é o mesmo token do
+ * link: só vale para pedidos confirmados da rodada daquele link. Não altera o pedido em si.
+ */
+export const setBoardOrderDone = createServerFn({ method: "POST" })
+  .validator((d: unknown) =>
+    z
+      .object({ token: z.string().max(200), orderId: z.string().uuid(), done: z.boolean() })
+      .parse(d),
+  )
+  .handler(
+    async ({
+      data,
+    }): Promise<
+      | { ok: true; doneAt: string | null }
+      | { ok: false; status: "invalid" | "expired" | "revoked" | "rate_limited" | "not_found" }
+    > => {
+      const db = await admin();
+      const sec = await import("@/lib/participant-security.server");
+      if (!(await sec.withinRateLimit(db, "board-done", 120, 60)))
+        return { ok: false, status: "rate_limited" };
+      const link = await resolveLink(db, sec.sha256Hex, data.token);
+      if (!link.ok) return { ok: false, status: link.status };
+      const { data: row, error } = await db
+        .from("orders")
+        .update({ done_at: data.done ? new Date().toISOString() : null })
+        .eq("id", data.orderId)
+        .eq("round_id", link.roundId)
+        .eq("status", "confirmed")
+        .select("done_at")
+        .maybeSingle();
+      if (error) throw new Error("Não foi possível atualizar o pedido.");
+      if (!row) return { ok: false, status: "not_found" };
+      return { ok: true, doneAt: row.done_at };
+    },
+  );
