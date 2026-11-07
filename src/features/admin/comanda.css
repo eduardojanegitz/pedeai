@@ -26,6 +26,13 @@
   margin: 0;
   padding: 0;
 }
+/* Os títulos do app usam a fonte condensada e caixa alta globais: na comanda, não. */
+.comanda :where(h1, h2, h3) {
+  font-family: inherit;
+  font-weight: inherit;
+  letter-spacing: normal;
+  text-transform: none;
+}
 .comanda ul {
   list-style: none;
 }

@@ -159,17 +159,19 @@ export function PrintDialog({
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-h-[92vh] overflow-y-auto rounded-3xl border-2 border-foreground bg-background sm:max-w-3xl">
+        <DialogContent className="max-h-[92vh] overflow-y-auto rounded-3xl border-2 border-foreground bg-background sm:max-w-4xl">
           <DialogHeader>
             <DialogTitle className="font-display text-4xl font-normal">
               Imprimir comanda
             </DialogTitle>
             <DialogDescription>
-              Escolha o modelo e o papel. A prévia ao lado é exatamente o que sai na impressora.
+              Escolha o modelo e o papel. A prévia mostra como a comanda sai no papel.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="grid gap-5 md:grid-cols-[minmax(0,1fr)_auto]">
+          <div
+            className={`grid gap-5 ${paper.pageWidthMm ? "md:grid-cols-[minmax(0,1fr)_auto]" : ""}`}
+          >
             <div className="space-y-4">
               <fieldset>
                 <legend className="mb-1.5 text-sm font-bold">Modelo</legend>
@@ -298,8 +300,8 @@ export function PrintDialog({
                 ref={previewRef}
                 className="mx-auto bg-white shadow-md"
                 style={{
-                  width: paper.pageWidthMm ? `${paper.pageWidthMm}mm` : "190mm",
-                  maxWidth: "100%",
+                  width: paper.pageWidthMm ? `${paper.pageWidthMm}mm` : "100%",
+                  maxWidth: paper.pageWidthMm ? "100%" : "190mm",
                 }}
               >
                 {sheet}
