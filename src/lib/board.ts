@@ -33,6 +33,9 @@ export type SharedBoardResult =
   | { status: "ok"; board: SharedBoard }
   | { status: "invalid" | "expired" | "revoked" | "rate_limited" };
 
+/** Formato do token do link: 256 bits em base64url (43 caracteres); aceita um pouco mais de folga. */
+export const isBoardToken = (t: string) => /^[A-Za-z0-9_-]{40,64}$/.test(t);
+
 /** "João da Silva Pereira" → "João P." (o estabelecimento não precisa do nome completo). */
 export function shortName(full: string): string {
   const parts = full.trim().split(/\s+/).filter(Boolean);

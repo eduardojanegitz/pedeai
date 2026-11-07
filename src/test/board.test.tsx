@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   boardPulse,
   boardToRoundOrders,
+  isBoardToken,
   shortName,
   type BoardOrder,
   type SharedBoardResult,
@@ -73,6 +74,17 @@ describe("lógica do link do estabelecimento", () => {
               note: "sem cebola",
             },
           ],
+  });
+
+  it("reconhece o formato do token e trata link cortado como inválido", () => {
+    expect(isBoardToken("A".repeat(43))).toBe(true);
+    expect(isBoardToken("aB3_-".repeat(9))).toBe(true);
+    expect(isBoardToken("abc")).toBe(false); // cortado ao colar no WhatsApp
+    expect(isBoardToken("A".repeat(39))).toBe(false);
+    expect(isBoardToken("A".repeat(65))).toBe(false);
+    expect(isBoardToken("$".repeat(43))).toBe(false);
+    expect(isBoardToken(`${"A".repeat(42)} `)).toBe(false);
+    expect(isBoardToken("")).toBe(false);
   });
 
   it("converte só pedidos confirmados, sem celular, preço nem pagamento", () => {

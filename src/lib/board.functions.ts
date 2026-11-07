@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/admin-middleware";
-import { shortName, type BoardOrder, type SharedBoardResult } from "@/lib/board";
+import { isBoardToken, shortName, type BoardOrder, type SharedBoardResult } from "@/lib/board";
 import type { RoundState } from "@/lib/orders.functions";
 
 async function admin() {
@@ -18,7 +18,6 @@ function newToken(): string {
     .replace(/=+$/, "");
 }
 
-const tokenSchema = z.string().regex(/^[A-Za-z0-9_-]{40,64}$/);
 const MAX_ACTIVE_LINKS = 10;
 
 export type BoardLink = {
@@ -116,8 +115,10 @@ export const revokeBoardLink = createServerFn({ method: "POST" })
  * Nunca celular, preço, pagamento ou código do participante.
  */
 export const getSharedBoard = createServerFn({ method: "POST" })
-  .validator((d: unknown) => z.object({ token: tokenSchema }).parse(d))
+  // Formato fora do padrão (ex.: link cortado ao colar) não é erro de servidor: é "link inválido".
+  .validator((d: unknown) => z.object({ token: z.string().max(200) }).parse(d))
   .handler(async ({ data }): Promise<SharedBoardResult> => {
+    if (!isBoardToken(data.token)) return { status: "invalid" };
     const db = await admin();
     const sec = await import("@/lib/participant-security.server");
     if (!(await sec.withinRateLimit(db, "board", 180, 60))) return { status: "rate_limited" };
