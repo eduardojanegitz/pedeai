@@ -244,10 +244,14 @@ export const setBoardOrderDone = createServerFn({ method: "POST" })
         .eq("id", data.orderId)
         .eq("round_id", link.roundId)
         .eq("status", "confirmed")
-        .select("done_at")
+        .select("done_at, participant_id")
         .maybeSingle();
       if (error) throw new Error("Não foi possível atualizar o pedido.");
       if (!row) return { ok: false, status: "not_found" };
+      if (data.done) {
+        const { notifyOrderReady } = await import("@/lib/push-notify.server");
+        await notifyOrderReady(db, row.participant_id);
+      }
       return { ok: true, doneAt: row.done_at };
     },
   );

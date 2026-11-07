@@ -12,6 +12,7 @@ Cardápio digital interativo (TanStack Start + React + Tailwind + Motion) com ba
 - **Pedir o de sempre**: quem já pediu em outra rodada vê, no início do pedido, uma faixa para repetir o último pedido em um toque. O pedido é montado com o cardápio de hoje (o que saiu do ar ou passou do limite é avisado) e abre direto na revisão, para conferir antes de confirmar.
 - **Pix e controle de pagamento**: cada organizador cadastra a própria chave Pix na aba **Ajustes** (CPF, CNPJ, e-mail, celular ou chave aleatória, com nome e cidade do recebedor; há um teste de R$ 1,00 para conferir no banco). Quem abriu a rodada recebe: o participante, na própria mensagem de confirmação do pedido ("Último passo: pagar por Pix") e depois na tela do pedido, vê o valor, o QR Code e o código "copia e cola" já com o valor; a confirmação de uma atualização de pedido não fecha sozinha enquanto houver Pix a pagar. O organizador marca "pago" na aba Pedidos (há filtro de pagamento e totais de recebido e a receber). O app **não confirma o pagamento sozinho**; itens sem preço não são cobrados; a chave só aparece inteira para quem tem pedido confirmado e toda troca de chave fica registrada (mascarada). Rodadas abertas antes desta versão (sem dono) usam o único organizador com Pix configurado.
 - **Link do estabelecimento** (Pedidos): página só de leitura, sem login, em `/comanda/<token>`, com os pedidos ao vivo (atualiza a cada 8 s), totais por produto, visão por pessoa, alerta sonoro e botão de imprimir a comanda (80 mm, 58 mm ou A4). O token é aleatório (256 bits) e só o hash fica no banco; o link aparece inteiro uma única vez ao ser gerado, vale por 6 h, 24 h ou 3 dias e pode ser revogado. Mostra só nome curto ("João P."), itens e observações: nunca celular, valores ou pagamentos. Quem prepara marca cada pedido como **concluído** (com contador, filtro "só pendentes" e aviso se o pedido mudar depois de concluído); o painel do organizador mostra os concluídos. Quem tem o link só consegue ler a comanda e marcar concluído. A página não é indexada e não vaza o endereço por Referer.
+- **Status do pedido e aviso no celular**: na tela do pedido confirmado o participante vê **Recebido → Em preparo → Pronto** (atualiza a cada 8 s). "Em preparo" aparece quando a rodada encerra; "Pronto" quando o estabelecimento marca o pedido como concluído na comanda ao vivo (com a página aberta toca um som, vibra e muda o título da aba). O botão **Avisar no celular quando ficar pronto** ativa notificação push, que chega com o navegador fechado. É preciso configurar as chaves VAPID no servidor (veja Desenvolvimento) e aplicar a migração `20261107000100_push_subscriptions.sql`; sem as chaves o botão não aparece. O push é enviado **sem conteúdo** (o texto é fixo no service worker), então nenhum dado pessoal passa pelo serviço de push. No iPhone só funciona com o app instalado na tela inicial (Compartilhar → Adicionar à Tela de Início).
 - Em outro aparelho, o participante recupera o pedido com o **código de recuperação** (mostrado uma vez). Celular sozinho não prova identidade.
 - `/admin` (login por e-mail e senha, só administradores) — **Cardápio** (categorias com regras, produtos, preço, disponibilidade, ordem), **Rodadas** (abertura/encerramento em horário de Brasília, reabrir) e **Pedidos** (filtros, visão consolidada, editados, PDF, Excel, texto para WhatsApp, redefinir código).
 
@@ -25,6 +26,8 @@ npm test
 ```
 
 Variável opcional no servidor: `RECOVERY_PEPPER` (texto longo e aleatório) reforça o hash dos códigos de recuperação; sem ela usa a `SUPABASE_SERVICE_ROLE_KEY` (trocar essa chave invalida os códigos já emitidos).
+
+Notificações push: gere as chaves com `node scripts/gen-vapid.mjs` e defina no servidor `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` (segredo) e `VAPID_SUBJECT` (`mailto:seu-email`). Sem elas o recurso fica desligado.
 
 O `.env` não é versionado. A `SUPABASE_SERVICE_ROLE_KEY` é injetada pelo Lovable Cloud na publicação e **nunca** vai para o navegador.
 
@@ -50,6 +53,7 @@ O `.env` não é versionado. A `SUPABASE_SERVICE_ROLE_KEY` é injetada pelo Lova
 - Cancelar um pedido não incrementa a versão dele.
 - A animação foi testada em navegador de computador; falta testar em celular real de entrada.
 - O efeito cinematográfico "produto escolhido voa para o resumo" não foi feito (existe só o efeito simples).
+- Aviso push: não testado em aparelho real (Android/iPhone) nem com os serviços de push de verdade; o iPhone exige o app instalado. Não há ícone PNG (só SVG) para a tela inicial.
 - Horário sempre de Brasília (UTC-3 fixo, sem horário de verão desde 2019).
 - Produtos sem categoria não aparecem no cardápio até serem atribuídos.
 - Fotos exigem URL assinada (bucket privado), gerada pelo servidor.

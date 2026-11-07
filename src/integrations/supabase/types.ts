@@ -331,6 +331,27 @@ export type Database = {
           },
         ];
       };
+      push_subscriptions: {
+        Row: {
+          created_at: string;
+          endpoint: string;
+          id: string;
+          participant_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          endpoint: string;
+          id?: string;
+          participant_id: string;
+        };
+        Update: {
+          created_at?: string;
+          endpoint?: string;
+          id?: string;
+          participant_id?: string;
+        };
+        Relationships: [];
+      };
       rounds: {
         Row: {
           closes_at: string | null;

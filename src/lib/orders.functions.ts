@@ -4,6 +4,7 @@ import { requireAdmin } from "@/lib/admin-middleware";
 import { mapOrderError, RATE_LIMITED_MESSAGE, type OrderErrorCode } from "@/lib/order-errors";
 import { pickLastOrder, type LastOrder } from "@/lib/last-order";
 import { cleanNote, NOTE_MAX } from "@/lib/order-note";
+import { orderProgress, type OrderProgress } from "@/lib/order-status";
 import { formatPhone } from "@/lib/phone";
 import { pixPayload, maskPixKey, type PixKeyType } from "@/lib/pix";
 import { generateRecoveryCode, normalizeRecoveryCode } from "@/lib/recovery-code";
@@ -383,6 +384,39 @@ export const getMyPayment = createServerFn({ method: "POST" })
       console.error(e);
       return { state: "unavailable", reason: "no_pix" };
     }
+  });
+
+// ---------- Status do pedido do participante ----------
+
+export type MyStatus =
+  { state: "none" } | { state: OrderProgress; doneAt: string | null; roundName: string };
+
+/** Em que pé está o pedido: recebido, em preparo ou pronto. Só lê o pedido do próprio participante. */
+export const getMyStatus = createServerFn({ method: "POST" })
+  .validator((d: unknown) => z.object({ token: tokenSchema, roundId: z.string().uuid() }).parse(d))
+  .handler(async ({ data }): Promise<MyStatus> => {
+    const db = await admin();
+    const found = await findParticipant(db, data.token);
+    if (!found) return { state: "none" };
+    const [{ data: order }, { data: roundState }, { data: round }] = await Promise.all([
+      db
+        .from("orders")
+        .select("status, done_at")
+        .eq("round_id", data.roundId)
+        .eq("participant_id", found.id)
+        .maybeSingle(),
+      db.rpc("get_round_state", { p_round: data.roundId }),
+      db.from("rounds").select("name").eq("id", data.roundId).maybeSingle(),
+    ]);
+    if (!order || order.status !== "confirmed") return { state: "none" };
+    return {
+      state: orderProgress({
+        roundState: (roundState as RoundState | null) ?? "open",
+        doneAt: order.done_at,
+      }),
+      doneAt: order.done_at,
+      roundName: round?.name ?? "",
+    };
   });
 
 export const renameParticipant = createServerFn({ method: "POST" })

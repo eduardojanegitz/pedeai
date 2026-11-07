@@ -18,6 +18,7 @@ import { Logo } from "@/components/brand/Logo";
 import { formatBRL, formatSaoPauloTime } from "@/lib/format";
 import { cancelOrder, type ActiveRound, type MyOrder } from "@/lib/orders.functions";
 import { buildSteps, selectedLines, totalCents, type Cart } from "./logic";
+import { OrderStatus } from "./OrderStatus";
 import { PixPayment } from "./PixPayment";
 import { RecoveryDialog } from "./RecoveryDialog";
 import { clearDraft } from "./storage";
@@ -145,6 +146,8 @@ export function ConfirmedOrder({
           </p>
         )}
       </div>
+
+      <OrderStatus token={token} roundId={round.id} />
 
       <PixPayment token={token} roundId={round.id} />
 
