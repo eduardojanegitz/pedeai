@@ -1,0 +1,14 @@
+{
+  "name": "PedeAí!",
+  "short_name": "PedeAí!",
+  "description": "Cardápio digital de pedidos em grupo.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#FFF4D6",
+  "theme_color": "#FF5A36",
+  "lang": "pt-BR",
+  "icons": [
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

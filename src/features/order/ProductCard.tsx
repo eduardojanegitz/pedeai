@@ -1,7 +1,9 @@
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { Check, Lock, Minus, Plus } from "lucide-react";
+import { Check, Lock, Minus, MessageSquarePlus, Plus } from "lucide-react";
+import { useId, useState } from "react";
 import type { MenuProduct } from "@/lib/catalog.functions";
 import { formatBRL } from "@/lib/format";
+import { NOTE_MAX } from "@/lib/order-note";
 
 type Props = {
   product: MenuProduct;
@@ -10,6 +12,9 @@ type Props = {
   blocked: boolean;
   allowQuantity: boolean;
   index: number;
+  /** Observação do participante para este item (vazia = sem observação). */
+  note: string;
+  onNote: (text: string) => void;
   onToggle: (el: HTMLElement) => void;
   onBlocked: () => void;
   onQuantity: (delta: 1 | -1) => void;
@@ -22,6 +27,8 @@ export function ProductCard({
   blocked,
   allowQuantity,
   index,
+  note,
+  onNote,
   onToggle,
   onBlocked,
   onQuantity,
@@ -29,6 +36,8 @@ export function ProductCard({
   const reduce = useReducedMotion();
   const selected = quantity > 0;
   const locked = blocked && !selected;
+  const noteId = useId();
+  const [noteOpen, setNoteOpen] = useState(note !== "");
 
   return (
     <motion.li
@@ -120,6 +129,42 @@ export function ProductCard({
             </p>
           </div>
         </button>
+
+        {selected && (
+          <div className="border-t-2 border-foreground/15 px-4 py-3">
+            {noteOpen || note ? (
+              <div>
+                <label htmlFor={noteId} className="text-sm font-semibold">
+                  Observação
+                </label>
+                <input
+                  id={noteId}
+                  type="text"
+                  value={note}
+                  maxLength={NOTE_MAX}
+                  autoComplete="off"
+                  enterKeyHint="done"
+                  placeholder="Ex.: sem cebola, bem passado"
+                  onChange={(e) => onNote(e.target.value)}
+                  className="mt-1 min-h-11 w-full rounded-xl border-2 border-foreground bg-card px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                />
+                {note.length >= NOTE_MAX - 20 && (
+                  <p className="mt-1 text-xs text-muted-foreground" aria-live="polite">
+                    {NOTE_MAX - note.length} caracteres restantes
+                  </p>
+                )}
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setNoteOpen(true)}
+                className="inline-flex min-h-11 items-center gap-2 text-sm font-bold underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <MessageSquarePlus className="h-4 w-4" aria-hidden /> Adicionar observação
+              </button>
+            )}
+          </div>
+        )}
 
         {allowQuantity && selected && (
           <div className="flex items-center justify-between border-t-2 border-foreground/15 px-4 py-3">

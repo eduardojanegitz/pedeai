@@ -18,6 +18,7 @@ const it_ = (
   pos: number,
   quantity = 1,
   price: number | null = null,
+  note: string | null = null,
 ) => ({
   product_id,
   product,
@@ -25,6 +26,7 @@ const it_ = (
   category_position: pos,
   price_cents: price,
   quantity,
+  note,
 });
 const order = (
   id: string,
@@ -40,6 +42,7 @@ const order = (
   created_at: "2026-11-04T12:00:00Z",
   updated_at: "2026-11-04T12:30:00Z",
   edited,
+  paid_at: null,
   items,
 });
 
@@ -120,7 +123,15 @@ describe("consolidação e indicadores", () => {
     expect(c[1]!.products[0]!.product).toBe("Arroz"); // mais pedido primeiro
   });
   it("totais: pedidos, itens, editados e valor só se houver preço", () => {
-    expect(summarize(orders)).toEqual({ orders: 3, items: 7, edited: 1, totalCents: 6000 });
+    expect(summarize(orders)).toEqual({
+      orders: 3,
+      items: 7,
+      edited: 1,
+      totalCents: 6000,
+      paidCents: 0,
+      pendingCents: 6000,
+      paidOrders: 0,
+    });
     expect(
       summarize([order("9", "X", [it_("a", "Arroz", "Acompanhamentos", 1)])]).totalCents,
     ).toBeNull();

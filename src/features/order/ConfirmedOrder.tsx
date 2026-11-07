@@ -18,6 +18,8 @@ import { Logo } from "@/components/brand/Logo";
 import { formatBRL, formatSaoPauloTime } from "@/lib/format";
 import { cancelOrder, type ActiveRound, type MyOrder } from "@/lib/orders.functions";
 import { buildSteps, selectedLines, totalCents, type Cart } from "./logic";
+import { OrderStatus } from "./OrderStatus";
+import { PixPayment } from "./PixPayment";
 import { RecoveryDialog } from "./RecoveryDialog";
 import { clearDraft } from "./storage";
 import type { Menu } from "./types";
@@ -50,6 +52,7 @@ export function ConfirmedOrder({
 
   const steps = buildSteps(menu.categories, menu.products);
   const cart: Cart = Object.fromEntries(me.items.map((i) => [i.product_id, i.quantity]));
+  const noteOf = new Map(me.items.map((i) => [i.product_id, i.note]));
   const known = new Set(menu.products.map((p) => p.id));
   const gone = me.items.filter((i) => !known.has(i.product_id));
   const total = totalCents(cart, steps);
@@ -61,6 +64,7 @@ export function ConfirmedOrder({
       clearDraft(round.id, me.participant.id);
       toast.success("Pedido cancelado");
       await qc.invalidateQueries({ queryKey: ["my-order"] });
+      void qc.invalidateQueries({ queryKey: ["my-payment"] });
     } catch (e) {
       toast.error(errMsg(e));
     } finally {
@@ -118,6 +122,11 @@ export function ConfirmedOrder({
                     <span className="font-semibold">
                       {quantity > 1 && <span className="mr-1 text-primary">{quantity}×</span>}
                       {product.name}
+                      {noteOf.get(product.id) && (
+                        <span className="block text-sm font-medium text-muted-foreground">
+                          Obs.: {noteOf.get(product.id)}
+                        </span>
+                      )}
                     </span>
                     {product.price_cents != null && (
                       <span className="text-sm text-muted-foreground">
@@ -137,6 +146,10 @@ export function ConfirmedOrder({
           </p>
         )}
       </div>
+
+      <OrderStatus token={token} roundId={round.id} />
+
+      <PixPayment token={token} roundId={round.id} />
 
       {canEdit ? (
         <>

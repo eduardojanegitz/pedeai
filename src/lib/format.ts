@@ -17,6 +17,16 @@ export function formatSaoPaulo(iso: string): string {
 }
 
 /** Só a hora, no fuso de Brasília. Ex.: "11:30". */
+/** Só o dia, em Brasília: "ter., 04/11". */
+export function formatSaoPauloDay(iso: string): string {
+  return new Intl.DateTimeFormat("pt-BR", {
+    timeZone: TZ,
+    weekday: "short",
+    day: "2-digit",
+    month: "2-digit",
+  }).format(new Date(iso));
+}
+
 export function formatSaoPauloTime(iso: string): string {
   return new Intl.DateTimeFormat("pt-BR", {
     timeZone: TZ,

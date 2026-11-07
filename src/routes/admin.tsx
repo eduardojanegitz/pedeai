@@ -40,6 +40,7 @@ const tabs = [
   { to: "/admin", label: "Cardápio", exact: true },
   { to: "/admin/rounds", label: "Rodadas", exact: false },
   { to: "/admin/orders", label: "Pedidos", exact: false },
+  { to: "/admin/settings", label: "Ajustes", exact: false },
 ] as const;
 
 function AdminLayout() {
@@ -87,7 +88,9 @@ function AdminLayout() {
       <header className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <Logo className="text-5xl" animate={false} />
         <div className="flex items-center gap-3">
-          {adminEmail && <span className="hidden text-sm text-muted-foreground sm:inline">{adminEmail}</span>}
+          {adminEmail && (
+            <span className="hidden text-sm text-muted-foreground sm:inline">{adminEmail}</span>
+          )}
           <button
             onClick={logout}
             disabled={signingOut}

@@ -12,8 +12,14 @@ import {
   FileText,
   KeyRound,
   Pencil,
+  Printer,
   RefreshCw,
   Search,
+  Share2,
+  Store,
+  CheckCircle2,
+  BadgeCheck,
+  Undo2,
 } from "lucide-react";
 import {
   Dialog,
@@ -22,23 +28,32 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { AlertsBar } from "@/features/admin/AlertsBar";
+import { changedSincePrint, type PrintOptions } from "@/features/admin/comanda";
+import { BoardLinkDialog } from "@/features/admin/BoardLinkDialog";
 import { ConfirmDialog } from "@/features/admin/ConfirmDialog";
+import { PrintDialog } from "@/features/admin/PrintDialog";
+import { PendingCard } from "@/features/admin/PendingCard";
+import { ShareDialog } from "@/features/admin/ShareDialog";
 import {
   consolidate,
   emptyFilters,
   filterOrders,
   groupByCategory,
   NO_CATEGORY,
+  orderValue,
   summarize,
   type OrderFilters,
 } from "@/features/admin/orders-logic";
 import { btnPlain, btnPrimary, errMsg, field } from "@/features/admin/ui";
+import { useOrderAlerts } from "@/features/admin/useOrderAlerts";
 import { copyText, exportExcel, exportPdf, toText } from "@/lib/export";
 import { formatBRL, formatSaoPauloTime } from "@/lib/format";
 import {
   getRoundOrders,
   listRounds,
   resetParticipantCode,
+  setOrderPaid,
   type RoundOrder,
 } from "@/lib/orders.functions";
 
@@ -66,15 +81,18 @@ function Tile({
   label,
   children,
   tone,
+  sub,
 }: {
   label: string;
   children: React.ReactNode;
   tone: string;
+  sub?: React.ReactNode;
 }) {
   return (
     <div className={`pop-card p-4 ${tone}`}>
       <p className="text-xs font-bold uppercase tracking-widest">{label}</p>
       <p className="font-display text-5xl leading-none">{children}</p>
+      {sub && <p className="mt-1 text-xs font-semibold">{sub}</p>}
     </div>
   );
 }
@@ -95,9 +113,22 @@ function OrdersPage() {
     refetchInterval: 30_000,
   });
   const orders = useMemo(() => q.data ?? [], [q.data]);
+  const alerts = useOrderAlerts({ roundId, active: !!round && round.state !== "closed" });
   const [filters, setFilters] = useState<OrderFilters>(emptyFilters);
   const [view, setView] = useState<View>("participants");
   const [resetFor, setResetFor] = useState<RoundOrder | null>(null);
+  const [printOpen, setPrintOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [boardOpen, setBoardOpen] = useState(false);
+  const [printPreset, setPrintPreset] = useState<Partial<PrintOptions> | undefined>(undefined);
+  const changedAfterPrint = useMemo(
+    () => changedSincePrint(orders, round?.last_printed_at ?? null),
+    [orders, round?.last_printed_at],
+  );
+  const openPrint = (preset?: Partial<PrintOptions>) => {
+    setPrintPreset(preset);
+    setPrintOpen(true);
+  };
 
   const filtered = useMemo(() => filterOrders(orders, filters), [orders, filters]);
   const stats = useMemo(() => summarize(orders), [orders]);
@@ -110,7 +141,22 @@ function OrdersPage() {
       ),
     [orders, filters.category],
   );
-  const filtering = filters.search || filters.category || filters.productId || filters.editedOnly;
+  const filtering =
+    filters.search ||
+    filters.category ||
+    filters.productId ||
+    filters.editedOnly ||
+    filters.payment;
+  const markPaid = useServerFn(setOrderPaid);
+  const togglePaid = async (o: RoundOrder) => {
+    try {
+      await markPaid({ data: { orderId: o.order_id, paid: !o.paid_at } });
+      await q.refetch();
+      toast.success(o.paid_at ? "Pagamento desmarcado" : `${o.participant}: pago`);
+    } catch (e) {
+      toast.error(errMsg(e));
+    }
+  };
 
   const run = (fn: () => Promise<void>, ok?: string) => async () => {
     try {
@@ -151,6 +197,16 @@ function OrdersPage() {
                 </option>
               ))}
             </select>
+            {round && (
+              <button className={btnPlain} onClick={() => setBoardOpen(true)}>
+                <Store className="h-4 w-4" aria-hidden /> Link do estabelecimento
+              </button>
+            )}
+            {round && round.state !== "closed" && (
+              <button className={btnPlain} onClick={() => setShareOpen(true)}>
+                <Share2 className="h-4 w-4" aria-hidden /> Compartilhar
+              </button>
+            )}
             <button
               aria-label="Atualizar pedidos"
               className={btnPlain}
@@ -161,10 +217,26 @@ function OrdersPage() {
           </div>
         )}
       </header>
+      {round && <AlertsBar alerts={alerts} />}
+      {alerts.newIds.size > 0 && (
+        <div
+          role="status"
+          className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border-2 border-foreground bg-secondary p-3 text-secondary-foreground"
+        >
+          <p className="text-sm font-bold">
+            {alerts.newIds.size === 1
+              ? "1 pedido novo ou alterado"
+              : `${alerts.newIds.size} pedidos novos ou alterados`}
+          </p>
+          <button type="button" className={btnPlain} onClick={alerts.markSeen}>
+            <Check className="h-4 w-4" aria-hidden /> Marcar como vistos
+          </button>
+        </div>
+      )}
       {q.dataUpdatedAt > 0 && (
         <p className="-mt-3 mb-4 text-xs text-muted-foreground" aria-live="off">
           Atualizado às {formatSaoPauloTime(new Date(q.dataUpdatedAt).toISOString())} · atualiza
-          sozinho a cada 30 s
+          sozinho
         </p>
       )}
 
@@ -189,10 +261,13 @@ function OrdersPage() {
           </button>
         </div>
       ) : orders.length === 0 ? (
-        <div className="pop-card p-10 text-center">
-          <h2 className="text-4xl">Sem pedidos ainda</h2>
-          <p className="mt-2 text-muted-foreground">Os pedidos confirmados aparecem aqui.</p>
-        </div>
+        <>
+          {round && <PendingCard round={round} />}
+          <div className="pop-card p-10 text-center">
+            <h2 className="text-4xl">Sem pedidos ainda</h2>
+            <p className="mt-2 text-muted-foreground">Os pedidos confirmados aparecem aqui.</p>
+          </div>
+        </>
       ) : (
         <>
           <div
@@ -208,14 +283,46 @@ function OrdersPage() {
               <Counter value={stats.edited} />
             </Tile>
             {stats.totalCents != null && (
-              <Tile label="Valor" tone="bg-card">
+              <Tile
+                label="Valor"
+                tone="bg-card"
+                sub={
+                  <>
+                    Recebido {formatBRL(stats.paidCents ?? 0)} · a receber{" "}
+                    {formatBRL(stats.pendingCents ?? 0)}
+                  </>
+                }
+              >
                 <span className="text-4xl">{formatBRL(stats.totalCents)}</span>
               </Tile>
             )}
           </div>
 
+          {changedAfterPrint.size > 0 && round.last_printed_at && (
+            <div
+              role="status"
+              className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border-2 border-foreground bg-accent p-3 text-accent-foreground"
+            >
+              <p className="text-sm font-bold">
+                {changedAfterPrint.size === 1
+                  ? "1 pedido mudou depois da última comanda impressa"
+                  : `${changedAfterPrint.size} pedidos mudaram depois da última comanda impressa`}{" "}
+                ({formatSaoPauloTime(round.last_printed_at)})
+              </p>
+              <button
+                type="button"
+                className={btnPlain}
+                onClick={() => openPrint({ mode: "people", onlyChanged: true })}
+              >
+                <Printer className="h-4 w-4" aria-hidden /> Imprimir só os alterados
+              </button>
+            </div>
+          )}
           <div className="mb-6 flex flex-wrap gap-2">
-            <button className={btnPrimary} onClick={run(() => exportPdf(round.name, orders))}>
+            <button className={btnPrimary} onClick={() => openPrint()}>
+              <Printer className="h-4 w-4" aria-hidden /> Imprimir comanda
+            </button>
+            <button className={btnPlain} onClick={run(() => exportPdf(round.name, orders))}>
               <FileText className="h-4 w-4" aria-hidden /> PDF
             </button>
             <button className={btnPlain} onClick={run(() => exportExcel(round.name, orders))}>
@@ -296,6 +403,28 @@ function OrdersPage() {
               />
               <span className="text-sm font-semibold">Só pedidos editados</span>
             </label>
+            {stats.totalCents != null && (
+              <div>
+                <label htmlFor="f-pay" className="sr-only">
+                  Pagamento
+                </label>
+                <select
+                  id="f-pay"
+                  value={filters.payment}
+                  onChange={(e) =>
+                    setFilters((f) => ({
+                      ...f,
+                      payment: e.target.value as OrderFilters["payment"],
+                    }))
+                  }
+                  className={field}
+                >
+                  <option value="">Todos os pagamentos</option>
+                  <option value="pending">A receber</option>
+                  <option value="paid">Pagos</option>
+                </select>
+              </div>
+            )}
           </section>
 
           <div
@@ -326,6 +455,8 @@ function OrdersPage() {
             </p>
           )}
 
+          {round && <PendingCard round={round} />}
+
           {filtered.length === 0 ? (
             <div className="pop-card p-8 text-center">
               <h2 className="text-3xl">Nenhum pedido com esses filtros</h2>
@@ -340,6 +471,9 @@ function OrdersPage() {
                   key={o.order_id}
                   order={o}
                   index={i}
+                  isNew={alerts.newIds.has(o.order_id)}
+                  afterPrint={changedAfterPrint.get(o.order_id) ?? null}
+                  onTogglePaid={() => void togglePaid(o)}
                   onReset={() => setResetFor(o)}
                 />
               ))}
@@ -374,6 +508,16 @@ function OrdersPage() {
                           />
                         </div>
                         <p className="mt-1 text-xs text-muted-foreground">{p.people.join(", ")}</p>
+                        {p.notes.length > 0 && (
+                          <ul className="mt-1 space-y-0.5">
+                            {p.notes.map((n, k) => (
+                              <li key={k} className="text-xs font-semibold text-primary">
+                                Obs.: {n.text}{" "}
+                                <span className="text-muted-foreground">({n.person})</span>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
                       </li>
                     ))}
                   </ul>
@@ -384,6 +528,17 @@ function OrdersPage() {
         </>
       )}
 
+      {round && <ShareDialog open={shareOpen} onOpenChange={setShareOpen} round={round} />}
+      {round && <BoardLinkDialog open={boardOpen} onOpenChange={setBoardOpen} round={round} />}
+      {round && (
+        <PrintDialog
+          open={printOpen}
+          onOpenChange={setPrintOpen}
+          round={round}
+          orders={orders}
+          preset={printPreset}
+        />
+      )}
       <ResetCodeFlow order={resetFor} onClose={() => setResetFor(null)} />
     </div>
   );
@@ -392,23 +547,37 @@ function OrdersPage() {
 function ParticipantCard({
   order: o,
   index,
+  isNew,
+  afterPrint,
+  onTogglePaid,
   onReset,
 }: {
   order: RoundOrder;
   index: number;
+  isNew: boolean;
+  /** Mudou depois da última comanda impressa (novo ou editado), ou null. */
+  afterPrint: "new" | "edited" | null;
+  onTogglePaid: () => void;
   onReset: () => void;
 }) {
   const reduce = useReducedMotion();
   const groups = groupByCategory(o.items);
+  const value = orderValue(o);
+  const changedAfterPay = !!o.paid_at && Date.parse(o.updated_at) > Date.parse(o.paid_at);
   return (
     <motion.li
       initial={reduce ? false : { opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: Math.min(index * 0.03, 0.25) }}
-      className="pop-card p-4"
+      className={`pop-card p-4 ${isNew ? "ring-4 ring-primary/50" : ""}`}
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
+          {isNew && (
+            <span className="mb-1 inline-block rounded-full bg-primary px-2.5 py-0.5 text-xs font-bold uppercase tracking-wider text-primary-foreground">
+              Novo
+            </span>
+          )}
           <h3 className="truncate text-3xl">{o.participant}</h3>
           <p className="text-sm text-muted-foreground">{o.phone ?? "Sem celular"}</p>
         </div>
@@ -421,6 +590,45 @@ function ParticipantCard({
           </span>
         )}
       </div>
+      {value != null && (
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-2xl border-2 border-foreground px-3 py-2">
+          <p className="text-sm font-bold">
+            {formatBRL(value)}{" "}
+            <span className={o.paid_at ? "text-primary" : "text-muted-foreground"}>
+              {o.paid_at ? `· pago ${formatSaoPauloTime(o.paid_at)}` : "· a receber"}
+            </span>
+          </p>
+          <button type="button" className={btnPlain} onClick={onTogglePaid}>
+            {o.paid_at ? (
+              <>
+                <Undo2 className="h-4 w-4" aria-hidden /> Desfazer
+              </>
+            ) : (
+              <>
+                <BadgeCheck className="h-4 w-4" aria-hidden /> Marcar como pago
+              </>
+            )}
+          </button>
+          {changedAfterPay && (
+            <p className="w-full text-xs font-bold text-destructive">
+              O pedido mudou depois do pagamento: confira se o valor ainda confere.
+            </p>
+          )}
+        </div>
+      )}
+      {o.done_at && (
+        <p className="mt-2 inline-flex items-center gap-1.5 rounded-full border-2 border-foreground bg-secondary px-2.5 py-0.5 text-xs font-bold text-secondary-foreground">
+          <CheckCircle2 className="h-3 w-3" aria-hidden /> Concluído pelo estabelecimento{" "}
+          {formatSaoPauloTime(o.done_at)}
+          {Date.parse(o.updated_at) > Date.parse(o.done_at) && " · mudou depois"}
+        </p>
+      )}
+      {afterPrint && (
+        <p className="mt-2 inline-flex items-center gap-1.5 rounded-full border-2 border-foreground px-2.5 py-0.5 text-xs font-bold">
+          <Printer className="h-3 w-3" aria-hidden /> {afterPrint === "new" ? "Novo" : "Alterado"}{" "}
+          após a impressão
+        </p>
+      )}
       <div className="mt-3 space-y-2">
         {groups.map((g) => (
           <div key={g.category ?? NO_CATEGORY}>
@@ -429,9 +637,12 @@ function ParticipantCard({
             </p>
             <ul className="text-sm">
               {g.items.map((it) => (
-                <li key={it.product_id} className="flex justify-between gap-2 py-0.5">
-                  <span>{it.product}</span>
-                  <span className="font-bold">{it.quantity}x</span>
+                <li key={it.product_id} className="py-0.5">
+                  <div className="flex justify-between gap-2">
+                    <span>{it.product}</span>
+                    <span className="font-bold">{it.quantity}x</span>
+                  </div>
+                  {it.note && <p className="text-xs font-semibold text-primary">Obs.: {it.note}</p>}
                 </li>
               ))}
             </ul>

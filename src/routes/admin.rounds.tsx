@@ -4,7 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { motion, useReducedMotion } from "motion/react";
 import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
-import { Lock, Play, RotateCcw, Save } from "lucide-react";
+import { Lock, Play, RotateCcw, Save, Share2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/features/admin/ConfirmDialog";
 import { ScheduleFields } from "@/features/admin/ScheduleFields";
+import { ShareDialog } from "@/features/admin/ShareDialog";
 import { btnPlain, btnPrimary, errMsg, field } from "@/features/admin/ui";
 import { formatSaoPaulo } from "@/lib/format";
 import {
@@ -249,6 +250,7 @@ function CurrentRound({
 }) {
   const [opens, setOpens] = useState(isoToSpLocal(round.opens_at));
   const [closes, setCloses] = useState(isoToSpLocal(round.closes_at));
+  const [shareOpen, setShareOpen] = useState(false);
   const dirty = opens !== isoToSpLocal(round.opens_at) || closes !== isoToSpLocal(round.closes_at);
   // Encerrada pelo horário mas ainda marcada como aberta: oferece reabrir com novo horário.
   const expired = round.state === "closed";
@@ -269,20 +271,28 @@ function CurrentRound({
             <StateBadge state={round.state} />
           </p>
         </div>
-        {expired ? (
-          <button className={btnPrimary} onClick={onReopen} disabled={busy}>
-            <RotateCcw className="h-4 w-4" aria-hidden /> Reabrir
-          </button>
-        ) : (
-          <button
-            className={`${btnPlain} bg-foreground text-background`}
-            onClick={onClose}
-            disabled={busy}
-          >
-            <Lock className="h-4 w-4" aria-hidden /> Encerrar agora
-          </button>
-        )}
+        <div className="flex flex-wrap gap-2">
+          {!expired && (
+            <button className={btnPrimary} onClick={() => setShareOpen(true)}>
+              <Share2 className="h-4 w-4" aria-hidden /> Compartilhar
+            </button>
+          )}
+          {expired ? (
+            <button className={btnPrimary} onClick={onReopen} disabled={busy}>
+              <RotateCcw className="h-4 w-4" aria-hidden /> Reabrir
+            </button>
+          ) : (
+            <button
+              className={`${btnPlain} bg-foreground text-background`}
+              onClick={onClose}
+              disabled={busy}
+            >
+              <Lock className="h-4 w-4" aria-hidden /> Encerrar agora
+            </button>
+          )}
+        </div>
       </div>
+      <ShareDialog open={shareOpen} onOpenChange={setShareOpen} round={round} />
       <ScheduleFields
         idPrefix="cur"
         opens={opens}

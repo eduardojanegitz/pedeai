@@ -1,0 +1,143 @@
+/* Comanda: mesma marcação na prévia da tela e no papel. Monocromática e de alto contraste
+   (impressoras térmicas só imprimem preto). */
+.comanda {
+  --c-fs: 13px;
+  color: #000;
+  background: #fff;
+  font-family: ui-sans-serif, system-ui, "Segoe UI", Arial, sans-serif;
+  font-size: var(--c-fs);
+  line-height: 1.25;
+  padding: 4mm 3mm;
+  box-sizing: border-box;
+  width: 100%;
+}
+.comanda[data-paper="58mm"] {
+  --c-fs: 11.5px;
+  padding: 3mm 1.5mm;
+}
+.comanda[data-paper="a4"] {
+  --c-fs: 14px;
+  padding: 0;
+}
+.comanda * {
+  box-sizing: border-box;
+}
+.comanda :where(h1, h2, h3, p, ul) {
+  margin: 0;
+  padding: 0;
+}
+/* Os títulos do app usam a fonte condensada e caixa alta globais: na comanda, não. */
+.comanda :where(h1, h2, h3) {
+  font-family: inherit;
+  font-weight: inherit;
+  letter-spacing: normal;
+  text-transform: none;
+}
+.comanda ul {
+  list-style: none;
+}
+.comanda__brand {
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  font-size: calc(var(--c-fs) * 0.9);
+}
+.comanda__title {
+  font-size: calc(var(--c-fs) * 1.5);
+  font-weight: 800;
+  line-height: 1.1;
+  margin-top: 1mm;
+  word-break: break-word;
+}
+.comanda__meta {
+  margin-top: 1mm;
+  font-size: calc(var(--c-fs) * 0.92);
+}
+.comanda__rule {
+  border: 0;
+  border-top: 2px dashed #000;
+  margin: 2.5mm 0;
+}
+.comanda__cat {
+  margin-top: 4mm;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: calc(var(--c-fs) * 0.95);
+  border-bottom: 1px solid #000;
+  padding-bottom: 0.5mm;
+}
+.comanda__line {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  column-gap: 2mm;
+  align-items: baseline;
+  margin-top: 1.8mm;
+  break-inside: avoid;
+}
+.comanda__qty {
+  font-weight: 800;
+  font-size: calc(var(--c-fs) * 1.25);
+  min-width: 2.2em;
+}
+.comanda__name {
+  font-weight: 700;
+  word-break: break-word;
+}
+.comanda__price {
+  font-variant-numeric: tabular-nums;
+}
+.comanda__note {
+  grid-column: 2 / -1;
+  font-size: calc(var(--c-fs) * 0.92);
+  font-style: italic;
+  word-break: break-word;
+}
+.comanda__changed {
+  margin-top: 2mm;
+  border: 2px solid #000;
+  padding: 1mm 1.5mm;
+  font-weight: 800;
+  text-transform: uppercase;
+  font-size: calc(var(--c-fs) * 0.85);
+}
+.comanda__people-list {
+  margin-top: 1mm;
+  font-size: calc(var(--c-fs) * 0.92);
+}
+.comanda__total {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 4mm;
+  font-weight: 800;
+  border-top: 1px solid #000;
+  padding-top: 1.2mm;
+}
+.comanda__foot {
+  margin-top: 3mm;
+  font-size: calc(var(--c-fs) * 0.8);
+  text-align: center;
+}
+/* Uma comanda por pessoa = um ticket: na bobina, corta entre eles. No A4, flui em duas colunas. */
+.comanda__ticket {
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+.comanda[data-paper="80mm"] .comanda__ticket,
+.comanda[data-paper="58mm"] .comanda__ticket {
+  break-after: page;
+  page-break-after: always;
+}
+.comanda[data-paper="80mm"] .comanda__ticket:last-child,
+.comanda[data-paper="58mm"] .comanda__ticket:last-child {
+  break-after: auto;
+  page-break-after: auto;
+}
+.comanda[data-paper="a4"] .comanda__tickets {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8mm 10mm;
+}
+.comanda[data-paper="a4"] .comanda__ticket {
+  border: 1.5px solid #000;
+  padding: 4mm;
+}

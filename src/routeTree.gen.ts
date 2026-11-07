@@ -14,7 +14,9 @@ import { Route as AdminRouteImport } from './routes/admin'
 import { Route as AdminIndexRouteImport } from './routes/admin.index'
 import { Route as AdminOrdersRouteImport } from './routes/admin.orders'
 import { Route as AdminRoundsRouteImport } from './routes/admin.rounds'
+import { Route as AdminSettingsRouteImport } from './routes/admin.settings'
 import { Route as AdminLoginRouteImport } from './routes/admin_.login'
+import { Route as ComandaTokenRouteImport } from './routes/comanda.$token'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -41,9 +43,19 @@ const AdminRoundsRoute = AdminRoundsRouteImport.update({
   path: '/rounds',
   getParentRoute: () => AdminRoute,
 } as any)
+const AdminSettingsRoute = AdminSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => AdminRoute,
+} as any)
 const AdminLoginRoute = AdminLoginRouteImport.update({
   id: '/admin_/login',
   path: '/admin/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ComandaTokenRoute = ComandaTokenRouteImport.update({
+  id: '/comanda/$token',
+  path: '/comanda/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
 
@@ -52,14 +64,18 @@ export interface FileRoutesByFullPath {
   '/admin': typeof AdminRouteWithChildren
   '/admin/orders': typeof AdminOrdersRoute
   '/admin/rounds': typeof AdminRoundsRoute
+  '/admin/settings': typeof AdminSettingsRoute
   '/admin/login': typeof AdminLoginRoute
+  '/comanda/$token': typeof ComandaTokenRoute
   '/admin/': typeof AdminIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/admin/orders': typeof AdminOrdersRoute
   '/admin/rounds': typeof AdminRoundsRoute
+  '/admin/settings': typeof AdminSettingsRoute
   '/admin/login': typeof AdminLoginRoute
+  '/comanda/$token': typeof ComandaTokenRoute
   '/admin': typeof AdminIndexRoute
 }
 export interface FileRoutesById {
@@ -68,7 +84,9 @@ export interface FileRoutesById {
   '/admin': typeof AdminRouteWithChildren
   '/admin/orders': typeof AdminOrdersRoute
   '/admin/rounds': typeof AdminRoundsRoute
+  '/admin/settings': typeof AdminSettingsRoute
   '/admin_/login': typeof AdminLoginRoute
+  '/comanda/$token': typeof ComandaTokenRoute
   '/admin/': typeof AdminIndexRoute
 }
 export interface FileRouteTypes {
@@ -78,17 +96,28 @@ export interface FileRouteTypes {
     | '/admin'
     | '/admin/orders'
     | '/admin/rounds'
+    | '/admin/settings'
     | '/admin/login'
+    | '/comanda/$token'
     | '/admin/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/admin/orders' | '/admin/rounds' | '/admin/login' | '/admin'
+  to:
+    | '/'
+    | '/admin/orders'
+    | '/admin/rounds'
+    | '/admin/settings'
+    | '/admin/login'
+    | '/comanda/$token'
+    | '/admin'
   id:
     | '__root__'
     | '/'
     | '/admin'
     | '/admin/orders'
     | '/admin/rounds'
+    | '/admin/settings'
     | '/admin_/login'
+    | '/comanda/$token'
     | '/admin/'
   fileRoutesById: FileRoutesById
 }
@@ -96,6 +125,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AdminRoute: typeof AdminRouteWithChildren
   AdminLoginRoute: typeof AdminLoginRoute
+  ComandaTokenRoute: typeof ComandaTokenRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -135,11 +165,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminRoundsRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/admin/settings': {
+      id: '/admin/settings'
+      path: '/settings'
+      fullPath: '/admin/settings'
+      preLoaderRoute: typeof AdminSettingsRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/admin_/login': {
       id: '/admin_/login'
       path: '/admin/login'
       fullPath: '/admin/login'
       preLoaderRoute: typeof AdminLoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/comanda/$token': {
+      id: '/comanda/$token'
+      path: '/comanda/$token'
+      fullPath: '/comanda/$token'
+      preLoaderRoute: typeof ComandaTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
@@ -148,12 +192,14 @@ declare module '@tanstack/react-router' {
 interface AdminRouteChildren {
   AdminOrdersRoute: typeof AdminOrdersRoute
   AdminRoundsRoute: typeof AdminRoundsRoute
+  AdminSettingsRoute: typeof AdminSettingsRoute
   AdminIndexRoute: typeof AdminIndexRoute
 }
 
 const AdminRouteChildren: AdminRouteChildren = {
   AdminOrdersRoute: AdminOrdersRoute,
   AdminRoundsRoute: AdminRoundsRoute,
+  AdminSettingsRoute: AdminSettingsRoute,
   AdminIndexRoute: AdminIndexRoute,
 }
 
@@ -163,6 +209,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminRoute: AdminRouteWithChildren,
   AdminLoginRoute: AdminLoginRoute,
+  ComandaTokenRoute: ComandaTokenRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

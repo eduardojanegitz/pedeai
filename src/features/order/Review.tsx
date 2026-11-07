@@ -1,23 +1,37 @@
 import { motion, useReducedMotion } from "motion/react";
 import { AlertTriangle, Pencil, User } from "lucide-react";
 import { formatBRL } from "@/lib/format";
-import { invalidSteps, selectedLines, stepStatus, totalCents, type Cart, type Step } from "./logic";
+import { cleanNote } from "@/lib/order-note";
+import {
+  invalidSteps,
+  selectedLines,
+  stepStatus,
+  totalCents,
+  type Cart,
+  type Notes,
+  type Step,
+} from "./logic";
 
 /** Revisão final: pedido agrupado por categoria, com "Editar" em cada uma e validação das regras. */
 export function Review({
   steps,
   cart,
+  notes,
   participantName,
   isUpdate,
   unavailable,
+  basedOn,
   onEditStep,
 }: {
   steps: Step[];
   cart: Cart;
+  notes: Notes;
   participantName: string;
   isUpdate: boolean;
   /** Itens do pedido anterior que não estão mais disponíveis. */
   unavailable: string[];
+  /** Quando o pedido foi montado a partir de um anterior: o dia dele (ex.: "ter., 04/11"). */
+  basedOn?: string | undefined;
   onEditStep: (index: number) => void;
 }) {
   const reduce = useReducedMotion();
@@ -34,6 +48,12 @@ export function Review({
         <User className="h-4 w-4" aria-hidden /> Pedido de{" "}
         <strong className="text-foreground">{participantName}</strong>
       </p>
+
+      {basedOn && (
+        <p className="mt-3 rounded-2xl border-2 border-foreground bg-secondary px-3 py-2 text-sm font-semibold text-secondary-foreground">
+          Montamos este pedido a partir do seu pedido de {basedOn}. Confira antes de confirmar.
+        </p>
+      )}
 
       {unavailable.length > 0 && (
         <div
@@ -107,10 +127,16 @@ export function Review({
                       )}
                       <span className="min-w-0 flex-1">
                         <span className="block truncate font-bold">{product.name}</span>
-                        {product.description && (
-                          <span className="block truncate text-sm text-muted-foreground">
-                            {product.description}
+                        {cleanNote(notes[product.id]) ? (
+                          <span className="block text-sm font-semibold text-primary">
+                            Obs.: {cleanNote(notes[product.id])}
                           </span>
+                        ) : (
+                          product.description && (
+                            <span className="block truncate text-sm text-muted-foreground">
+                              {product.description}
+                            </span>
+                          )
                         )}
                       </span>
                       <span className="text-right text-sm">
