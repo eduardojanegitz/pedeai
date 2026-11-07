@@ -1,12 +1,22 @@
 import { motion, useReducedMotion } from "motion/react";
 import { AlertTriangle, Pencil, User } from "lucide-react";
 import { formatBRL } from "@/lib/format";
-import { invalidSteps, selectedLines, stepStatus, totalCents, type Cart, type Step } from "./logic";
+import { cleanNote } from "@/lib/order-note";
+import {
+  invalidSteps,
+  selectedLines,
+  stepStatus,
+  totalCents,
+  type Cart,
+  type Notes,
+  type Step,
+} from "./logic";
 
 /** Revisão final: pedido agrupado por categoria, com "Editar" em cada uma e validação das regras. */
 export function Review({
   steps,
   cart,
+  notes,
   participantName,
   isUpdate,
   unavailable,
@@ -14,6 +24,7 @@ export function Review({
 }: {
   steps: Step[];
   cart: Cart;
+  notes: Notes;
   participantName: string;
   isUpdate: boolean;
   /** Itens do pedido anterior que não estão mais disponíveis. */
@@ -107,10 +118,16 @@ export function Review({
                       )}
                       <span className="min-w-0 flex-1">
                         <span className="block truncate font-bold">{product.name}</span>
-                        {product.description && (
-                          <span className="block truncate text-sm text-muted-foreground">
-                            {product.description}
+                        {cleanNote(notes[product.id]) ? (
+                          <span className="block text-sm font-semibold text-primary">
+                            Obs.: {cleanNote(notes[product.id])}
                           </span>
+                        ) : (
+                          product.description && (
+                            <span className="block truncate text-sm text-muted-foreground">
+                              {product.description}
+                            </span>
+                          )
                         )}
                       </span>
                       <span className="text-right text-sm">

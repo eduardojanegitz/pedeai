@@ -1,7 +1,11 @@
 import type { MenuCategory, MenuProduct } from "@/lib/catalog.functions";
+import { cleanNote } from "@/lib/order-note";
 
 /** Carrinho: id do produto -> quantidade. */
 export type Cart = Record<string, number>;
+
+/** Observações: id do produto -> texto livre (só vale para produtos que estão no carrinho). */
+export type Notes = Record<string, string>;
 
 /** Uma etapa do pedido = uma categoria ativa que tenha ao menos um produto ativo. */
 export type Step = { category: MenuCategory; products: MenuProduct[] };
@@ -84,9 +88,13 @@ export function totalCents(cart: Cart, steps: Step[]): number | null {
 }
 
 /** Em unidades: no pedido, opções repetidas contam pela quantidade. */
-export function cartLinesForServer(cart: Cart, steps: Step[]) {
+export function cartLinesForServer(cart: Cart, steps: Step[], notes: Notes = {}) {
   return steps.flatMap((s) =>
-    selectedLines(cart, s).map(({ product, quantity }) => ({ product_id: product.id, quantity })),
+    selectedLines(cart, s).map(({ product, quantity }) => ({
+      product_id: product.id,
+      quantity,
+      note: cleanNote(notes[product.id]),
+    })),
   );
 }
 

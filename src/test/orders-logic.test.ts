@@ -18,6 +18,7 @@ const it_ = (
   pos: number,
   quantity = 1,
   price: number | null = null,
+  note: string | null = null,
 ) => ({
   product_id,
   product,
@@ -25,6 +26,7 @@ const it_ = (
   category_position: pos,
   price_cents: price,
   quantity,
+  note,
 });
 const order = (
   id: string,

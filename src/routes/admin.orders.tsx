@@ -374,6 +374,16 @@ function OrdersPage() {
                           />
                         </div>
                         <p className="mt-1 text-xs text-muted-foreground">{p.people.join(", ")}</p>
+                        {p.notes.length > 0 && (
+                          <ul className="mt-1 space-y-0.5">
+                            {p.notes.map((n, k) => (
+                              <li key={k} className="text-xs font-semibold text-primary">
+                                Obs.: {n.text}{" "}
+                                <span className="text-muted-foreground">({n.person})</span>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
                       </li>
                     ))}
                   </ul>
@@ -429,9 +439,12 @@ function ParticipantCard({
             </p>
             <ul className="text-sm">
               {g.items.map((it) => (
-                <li key={it.product_id} className="flex justify-between gap-2 py-0.5">
-                  <span>{it.product}</span>
-                  <span className="font-bold">{it.quantity}x</span>
+                <li key={it.product_id} className="py-0.5">
+                  <div className="flex justify-between gap-2">
+                    <span>{it.product}</span>
+                    <span className="font-bold">{it.quantity}x</span>
+                  </div>
+                  {it.note && <p className="text-xs font-semibold text-primary">Obs.: {it.note}</p>}
                 </li>
               ))}
             </ul>

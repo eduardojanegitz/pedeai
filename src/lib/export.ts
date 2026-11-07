@@ -58,7 +58,9 @@ export function toText(roundName: string, orders: RoundOrder[]) {
   ];
   orders.forEach((o) => {
     lines.push(`*${o.participant}*`);
-    o.items.forEach((i) => lines.push(`  ${i.quantity}x ${i.product}`));
+    o.items.forEach((i) =>
+      lines.push(`  ${i.quantity}x ${i.product}${i.note ? ` (obs.: ${i.note})` : ""}`),
+    );
     lines.push("");
   });
   const cats = consolidate(orders);
@@ -86,6 +88,7 @@ export async function exportExcel(roundName: string, orders: RoundOrder[]) {
       Categoria: i.category ?? "",
       Produto: i.product,
       Quantidade: i.quantity,
+      Observação: i.note ?? "",
       ...(priced ? { "Preço unit.": i.price_cents != null ? i.price_cents / 100 : "" } : {}),
       "Pedido em": stamp(o.created_at),
       "Última edição": stamp(o.updated_at),
@@ -104,6 +107,7 @@ export async function exportExcel(roundName: string, orders: RoundOrder[]) {
     { wch: 18 },
     { wch: 30 },
     { wch: 11 },
+    { wch: 28 },
     ...(priced ? [{ wch: 11 }] : []),
     { wch: 17 },
     { wch: 17 },
@@ -158,17 +162,18 @@ export async function exportPdf(roundName: string, orders: RoundOrder[]) {
   doc.text("Por participante", 40, y);
   autoTable(doc, {
     startY: y + 8,
-    head: [["Participante", "Categoria", "Item", "Qtd"]],
+    head: [["Participante", "Categoria", "Item", "Obs.", "Qtd"]],
     body: orders.flatMap((o) =>
       o.items.map((i, idx) => [
         idx === 0 ? o.participant : "",
         i.category ?? "",
         i.product,
+        i.note ?? "",
         String(i.quantity),
       ]),
     ),
     headStyles: { fillColor: coral },
-    columnStyles: { 3: { halign: "right", cellWidth: 50 } },
+    columnStyles: { 4: { halign: "right", cellWidth: 50 } },
     margin: { left: 40, right: 40 },
   });
   doc.save(`pedidos-${slug(roundName)}.pdf`);

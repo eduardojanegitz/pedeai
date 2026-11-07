@@ -17,6 +17,7 @@ import {
 import { Logo } from "@/components/brand/Logo";
 import type { MenuProduct } from "@/lib/catalog.functions";
 import { formatSaoPauloTime } from "@/lib/format";
+import { NOTE_MAX } from "@/lib/order-note";
 import { getMyOrder, submitOrder, type ActiveRound, type MyOrder } from "@/lib/orders.functions";
 import { FloatingDock } from "./FloatingDock";
 import {
@@ -33,6 +34,7 @@ import {
   totalCents,
   totalItems,
   type Cart,
+  type Notes,
   type Step,
 } from "./logic";
 import { ProductCard } from "./ProductCard";
@@ -40,7 +42,7 @@ import { RecoveryDialog } from "./RecoveryDialog";
 import { Review } from "./Review";
 import { StepProgress } from "./StepProgress";
 import { SummarySheet } from "./SummarySheet";
-import { clearDraft, loadDraft, saveDraft } from "./storage";
+import { clearDraft, loadDraft, loadDraftNotes, saveDraft, saveDraftNotes } from "./storage";
 import { btnPlain, errMsg } from "./ui";
 import type { Menu } from "./types";
 
@@ -89,11 +91,19 @@ export function OrderFlow({
     const cart: Cart = draft
       ? Object.fromEntries(Object.entries(draft).filter(([id]) => byId.has(id)))
       : Object.fromEntries(fromServer.map((i) => [i.product_id, i.quantity]));
-    return { cart, unavailable };
+    const draftNotes = draft ? (loadDraftNotes(round.id, me.participant.id) ?? {}) : null;
+    const notes: Notes = Object.fromEntries(
+      (draftNotes
+        ? Object.entries(draftNotes)
+        : fromServer.flatMap((i) => (i.note ? [[i.product_id, i.note] as const] : []))
+      ).filter(([id, text]) => id in cart && typeof text === "string"),
+    );
+    return { cart, notes, unavailable };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- só no primeiro render
   }, []);
 
   const [cart, setCart] = useState<Cart>(initial.cart);
+  const [notes, setNotes] = useState<Notes>(initial.notes);
   const [view, setView] = useState<View>({ kind: "step", index: 0 });
   const [dir, setDir] = useState<1 | -1>(1);
   const [returnToReview, setReturnToReview] = useState(false);
@@ -112,6 +122,9 @@ export function OrderFlow({
   useEffect(() => {
     if (!existing) saveDraft(round.id, me.participant.id, cart);
   }, [cart, existing, round.id, me.participant.id]);
+  useEffect(() => {
+    if (!existing) saveDraftNotes(round.id, me.participant.id, notes);
+  }, [notes, existing, round.id, me.participant.id]);
 
   const currentIndex = view.kind === "review" ? steps.length : view.index;
   const step: Step | undefined = view.kind === "step" ? steps[view.index] : undefined;
@@ -168,6 +181,7 @@ export function OrderFlow({
         delete n[p.id];
         return n;
       });
+      dropNote(p.id);
       return;
     }
     if (!canAdd(cart, s, p.id))
@@ -193,8 +207,20 @@ export function OrderFlow({
       ]);
     }
   };
+  const dropNote = (id: string) =>
+    setNotes((n) => {
+      if (!(id in n)) return n;
+      const rest = { ...n };
+      delete rest[id];
+      return rest;
+    });
+  const setNote = (id: string, text: string) => {
+    touch();
+    setNotes((n) => ({ ...n, [id]: text.slice(0, NOTE_MAX) }));
+  };
   const remove = (id: string) => {
     touch();
+    dropNote(id);
     setCart((c) => {
       const n = { ...c };
       delete n[id];
@@ -221,7 +247,7 @@ export function OrderFlow({
           roundId: round.id,
           expectedVersion,
           requestId: requestId.current,
-          items: cartLinesForServer(cart, steps),
+          items: cartLinesForServer(cart, steps, notes),
         },
       });
       if (!res.ok) {
@@ -280,6 +306,13 @@ export function OrderFlow({
     setCart(
       Object.fromEntries(
         fresh.items.filter((i) => byId.has(i.product_id)).map((i) => [i.product_id, i.quantity]),
+      ),
+    );
+    setNotes(
+      Object.fromEntries(
+        fresh.items.flatMap((i) =>
+          byId.has(i.product_id) && i.note ? [[i.product_id, i.note] as const] : [],
+        ),
       ),
     );
     touch();
@@ -389,6 +422,7 @@ export function OrderFlow({
               <Review
                 steps={steps}
                 cart={cart}
+                notes={notes}
                 participantName={me.participant.display_name}
                 isUpdate={existing}
                 unavailable={initial.unavailable}
@@ -436,6 +470,8 @@ export function OrderFlow({
                         product={p}
                         index={i}
                         quantity={cart[p.id] ?? 0}
+                        note={notes[p.id] ?? ""}
+                        onNote={(text) => setNote(p.id, text)}
                         blocked={st.full}
                         allowQuantity={step.category.allow_quantity}
                         onToggle={(el) => toggle(step, p, el)}
@@ -510,7 +546,9 @@ export function OrderFlow({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => void showLatest()}>Ver versão atual</AlertDialogCancel>
+            <AlertDialogCancel onClick={() => void showLatest()}>
+              Ver versão atual
+            </AlertDialogCancel>
             <AlertDialogAction onClick={() => void keepMine()}>Manter as minhas</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

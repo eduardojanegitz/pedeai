@@ -65,6 +65,8 @@ export type ConsolidatedProduct = {
   product: string;
   quantity: number;
   people: string[];
+  /** Observações dos participantes ("sem cebola" · quem pediu). */
+  notes: { text: string; person: string }[];
   revenue: number | null;
 };
 export type ConsolidatedCategory = {
@@ -93,12 +95,14 @@ export function consolidate(orders: RoundOrder[]): ConsolidatedCategory[] {
           product: i.product,
           quantity: 0,
           people: [],
+          notes: [],
           revenue: null,
         };
         c.products.push(p);
       }
       p.quantity += i.quantity;
       p.people.push(o.participant);
+      if (i.note) p.notes.push({ text: i.note, person: o.participant });
       if (i.price_cents != null) p.revenue = (p.revenue ?? 0) + i.price_cents * i.quantity;
       c.quantity += i.quantity;
       cats.set(key, c);

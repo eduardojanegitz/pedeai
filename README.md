@@ -5,6 +5,7 @@ Cardápio digital interativo (TanStack Start + React + Tailwind + Motion) com ba
 ## Como funciona
 
 - `/` — o participante informa nome e celular, escolhe itens **uma categoria por etapa** (cada categoria tem mínimo e máximo), revisa e confirma. Vê a animação de conclusão só depois de o servidor confirmar. Pode editar ou cancelar até a rodada encerrar.
+- Cada item escolhido aceita uma **observação** de até 140 caracteres (ex.: "sem cebola"), que aparece na revisão, no painel, nas exportações e na comanda.
 - Em outro aparelho, o participante recupera o pedido com o **código de recuperação** (mostrado uma vez). Celular sozinho não prova identidade.
 - `/admin` (login por e-mail e senha, só administradores) — **Cardápio** (categorias com regras, produtos, preço, disponibilidade, ordem), **Rodadas** (abertura/encerramento em horário de Brasília, reabrir) e **Pedidos** (filtros, visão consolidada, editados, PDF, Excel, texto para WhatsApp, redefinir código).
 

@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/admin-middleware";
 import { mapOrderError, RATE_LIMITED_MESSAGE, type OrderErrorCode } from "@/lib/order-errors";
+import { cleanNote, NOTE_MAX } from "@/lib/order-note";
 import { formatPhone } from "@/lib/phone";
 import { generateRecoveryCode, normalizeRecoveryCode } from "@/lib/recovery-code";
 import { scheduleSchema } from "@/lib/schedule";
@@ -193,7 +194,12 @@ export type MyOrder = {
   status: "confirmed" | "cancelled" | null;
   /** Versão do pedido (0 = ainda não existe). Enviada de volta ao salvar para detectar edição concorrente. */
   version: number;
-  items: { product_id: string; quantity: number; product_name: string | null }[];
+  items: {
+    product_id: string;
+    quantity: number;
+    product_name: string | null;
+    note: string | null;
+  }[];
 };
 
 async function findParticipant(db: Awaited<ReturnType<typeof admin>>, token: string) {
@@ -220,7 +226,7 @@ export const getMyOrder = createServerFn({ method: "POST" })
     if (!data.roundId) return { participant, has_phone, status: null, version: 0, items: [] };
     const { data: order } = await db
       .from("orders")
-      .select("id, status, version, order_items(product_id, quantity, products(name))")
+      .select("id, status, version, order_items(product_id, quantity, note, products(name))")
       .eq("round_id", data.roundId)
       .eq("participant_id", participant.id)
       .maybeSingle();
@@ -234,6 +240,7 @@ export const getMyOrder = createServerFn({ method: "POST" })
         product_id: i.product_id,
         quantity: i.quantity,
         product_name: i.products?.name ?? null,
+        note: i.note ?? null,
       })),
     };
   });
@@ -280,7 +287,19 @@ export const submitOrder = createServerFn({ method: "POST" })
         requestId: z.string().uuid(),
         items: z
           .array(
-            z.object({ product_id: z.string().uuid(), quantity: z.number().int().min(1).max(99) }),
+            z.object({
+              product_id: z.string().uuid(),
+              quantity: z.number().int().min(1).max(99),
+              note: z
+                .string()
+                .max(NOTE_MAX * 2)
+                .nullish()
+                .transform((v) => cleanNote(v))
+                .refine(
+                  (v) => v === null || v.length <= NOTE_MAX,
+                  `Use até ${NOTE_MAX} caracteres`,
+                ),
+            }),
           )
           .min(1, "Escolha ao menos um item")
           .max(200),
@@ -337,6 +356,8 @@ export type RoundOrderItem = {
   category_position: number;
   price_cents: number | null;
   quantity: number;
+  /** Observação do participante ("sem cebola"). */
+  note: string | null;
 };
 
 export type RoundOrder = {
@@ -360,7 +381,7 @@ export const getRoundOrders = createServerFn({ method: "GET" })
     const { data: rows, error } = await db
       .from("orders")
       .select(
-        "id, created_at, updated_at, version, participant_id, participants(display_name, phone_e164), order_items(quantity, product_id, products(name, price_cents, categories(name, position)))",
+        "id, created_at, updated_at, version, participant_id, participants(display_name, phone_e164), order_items(quantity, note, product_id, products(name, price_cents, categories(name, position)))",
       )
       .eq("round_id", data.roundId)
       .eq("status", "confirmed")
@@ -375,6 +396,7 @@ export const getRoundOrders = createServerFn({ method: "GET" })
       participants: { display_name: string; phone_e164: string | null } | null;
       order_items: {
         quantity: number;
+        note: string | null;
         product_id: string;
         products: {
           name: string;
@@ -399,6 +421,7 @@ export const getRoundOrders = createServerFn({ method: "GET" })
           category_position: i.products?.categories?.position ?? 9999,
           price_cents: i.products?.price_cents ?? null,
           quantity: i.quantity,
+          note: i.note ?? null,
         }))
         .sort(
           (a, b) =>
