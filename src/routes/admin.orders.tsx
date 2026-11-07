@@ -16,6 +16,7 @@ import {
   RefreshCw,
   Search,
   Share2,
+  Store,
   BadgeCheck,
   Undo2,
 } from "lucide-react";
@@ -28,6 +29,7 @@ import {
 } from "@/components/ui/dialog";
 import { AlertsBar } from "@/features/admin/AlertsBar";
 import { changedSincePrint, type PrintOptions } from "@/features/admin/comanda";
+import { BoardLinkDialog } from "@/features/admin/BoardLinkDialog";
 import { ConfirmDialog } from "@/features/admin/ConfirmDialog";
 import { PrintDialog } from "@/features/admin/PrintDialog";
 import { ShareDialog } from "@/features/admin/ShareDialog";
@@ -115,6 +117,7 @@ function OrdersPage() {
   const [resetFor, setResetFor] = useState<RoundOrder | null>(null);
   const [printOpen, setPrintOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
+  const [boardOpen, setBoardOpen] = useState(false);
   const [printPreset, setPrintPreset] = useState<Partial<PrintOptions> | undefined>(undefined);
   const changedAfterPrint = useMemo(
     () => changedSincePrint(orders, round?.last_printed_at ?? null),
@@ -192,6 +195,11 @@ function OrdersPage() {
                 </option>
               ))}
             </select>
+            {round && (
+              <button className={btnPlain} onClick={() => setBoardOpen(true)}>
+                <Store className="h-4 w-4" aria-hidden /> Link do estabelecimento
+              </button>
+            )}
             {round && round.state !== "closed" && (
               <button className={btnPlain} onClick={() => setShareOpen(true)}>
                 <Share2 className="h-4 w-4" aria-hidden /> Compartilhar
@@ -514,6 +522,7 @@ function OrdersPage() {
       )}
 
       {round && <ShareDialog open={shareOpen} onOpenChange={setShareOpen} round={round} />}
+      {round && <BoardLinkDialog open={boardOpen} onOpenChange={setBoardOpen} round={round} />}
       {round && (
         <PrintDialog
           open={printOpen}

@@ -23,6 +23,36 @@ export type Database = {
         };
         Relationships: [];
       };
+      board_links: {
+        Row: {
+          created_at: string;
+          created_by: string | null;
+          expires_at: string;
+          id: string;
+          revoked_at: string | null;
+          round_id: string;
+          token_hash: string;
+        };
+        Insert: {
+          created_at?: string;
+          created_by?: string | null;
+          expires_at: string;
+          id?: string;
+          revoked_at?: string | null;
+          round_id: string;
+          token_hash: string;
+        };
+        Update: {
+          created_at?: string;
+          created_by?: string | null;
+          expires_at?: string;
+          id?: string;
+          revoked_at?: string | null;
+          round_id?: string;
+          token_hash?: string;
+        };
+        Relationships: [];
+      };
       admin_settings: {
         Row: {
           admin_id: string;
