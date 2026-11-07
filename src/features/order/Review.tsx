@@ -20,6 +20,7 @@ export function Review({
   participantName,
   isUpdate,
   unavailable,
+  basedOn,
   onEditStep,
 }: {
   steps: Step[];
@@ -29,6 +30,8 @@ export function Review({
   isUpdate: boolean;
   /** Itens do pedido anterior que não estão mais disponíveis. */
   unavailable: string[];
+  /** Quando o pedido foi montado a partir de um anterior: o dia dele (ex.: "ter., 04/11"). */
+  basedOn?: string | undefined;
   onEditStep: (index: number) => void;
 }) {
   const reduce = useReducedMotion();
@@ -45,6 +48,12 @@ export function Review({
         <User className="h-4 w-4" aria-hidden /> Pedido de{" "}
         <strong className="text-foreground">{participantName}</strong>
       </p>
+
+      {basedOn && (
+        <p className="mt-3 rounded-2xl border-2 border-foreground bg-secondary px-3 py-2 text-sm font-semibold text-secondary-foreground">
+          Montamos este pedido a partir do seu pedido de {basedOn}. Confira antes de confirmar.
+        </p>
+      )}
 
       {unavailable.length > 0 && (
         <div

@@ -130,3 +130,47 @@ export function missingText(c: MenuCategory, s: StepStatus): string {
   const n = s.min - s.picked;
   return `Falta${n > 1 ? "m" : ""} ${n} em ${c.name}`;
 }
+
+/**
+ * Monta o carrinho a partir de um pedido anterior, respeitando o cardápio ATUAL:
+ * - itens que saíram do cardápio (ou de categoria inativa) ficam de fora;
+ * - se uma categoria passou a ter limite menor, mantém só as primeiras opções (na ordem do cardápio);
+ * - quantidade > 1 só onde a categoria permite hoje.
+ * `skipped` traz os nomes do que não pôde ser repetido, para avisar o participante.
+ */
+export function prefillFromLast(
+  steps: Step[],
+  last: {
+    product_id: string;
+    quantity: number;
+    note: string | null;
+    product_name: string | null;
+  }[],
+): { cart: Cart; notes: Notes; skipped: string[] } {
+  const byId = new Map(last.map((i) => [i.product_id, i]));
+  const cart: Cart = {};
+  const notes: Notes = {};
+  const skipped: string[] = [];
+  const placed = new Set<string>();
+  for (const step of steps) {
+    let taken = 0;
+    for (const p of step.products) {
+      const item = byId.get(p.id);
+      if (!item) continue;
+      if (taken >= step.category.max_select) {
+        skipped.push(p.name);
+        placed.add(p.id);
+        continue;
+      }
+      cart[p.id] = step.category.allow_quantity ? Math.min(99, Math.max(1, item.quantity)) : 1;
+      const note = cleanNote(item.note);
+      if (note) notes[p.id] = note;
+      taken++;
+      placed.add(p.id);
+    }
+  }
+  for (const item of last) {
+    if (!placed.has(item.product_id)) skipped.push(item.product_name ?? "Item removido");
+  }
+  return { cart, notes, skipped };
+}

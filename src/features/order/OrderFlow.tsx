@@ -1,4 +1,4 @@
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -16,9 +16,15 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Logo } from "@/components/brand/Logo";
 import type { MenuProduct } from "@/lib/catalog.functions";
-import { formatSaoPauloTime } from "@/lib/format";
+import { formatSaoPauloDay, formatSaoPauloTime } from "@/lib/format";
 import { NOTE_MAX } from "@/lib/order-note";
-import { getMyOrder, submitOrder, type ActiveRound, type MyOrder } from "@/lib/orders.functions";
+import {
+  getLastOrder,
+  getMyOrder,
+  submitOrder,
+  type ActiveRound,
+  type MyOrder,
+} from "@/lib/orders.functions";
 import { FloatingDock } from "./FloatingDock";
 import {
   buildSteps,
@@ -28,6 +34,7 @@ import {
   invalidSteps,
   limitMessage,
   missingText,
+  prefillFromLast,
   selectedLines,
   stepStatus,
   stepTitle,
@@ -38,6 +45,7 @@ import {
   type Step,
 } from "./logic";
 import { ProductCard } from "./ProductCard";
+import { RepeatLastOrder } from "./RepeatLastOrder";
 import { RecoveryDialog } from "./RecoveryDialog";
 import { Review } from "./Review";
 import { StepProgress } from "./StepProgress";
@@ -104,6 +112,15 @@ export function OrderFlow({
 
   const [cart, setCart] = useState<Cart>(initial.cart);
   const [notes, setNotes] = useState<Notes>(initial.notes);
+  const [prefill, setPrefill] = useState<{ skipped: string[]; basedOn: string } | null>(null);
+  // "O de sempre": só faz sentido para pedido novo (quem está editando já tem o seu).
+  const last = useQuery({
+    queryKey: ["last-order", token, round.id],
+    queryFn: () => getLastOrder({ data: { token, roundId: round.id } }),
+    enabled: !existing,
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
   const [view, setView] = useState<View>({ kind: "step", index: 0 });
   const [dir, setDir] = useState<1 | -1>(1);
   const [returnToReview, setReturnToReview] = useState(false);
@@ -298,6 +315,19 @@ export function OrderFlow({
     setVersion(fresh.version);
     await confirm(fresh.version);
   };
+  const repeatLast = () => {
+    if (!last.data) return;
+    const r = prefillFromLast(steps, last.data.items);
+    if (Object.keys(r.cart).length === 0) {
+      toast.error("Nada do seu último pedido está disponível hoje. Escolha pelo cardápio.");
+      return;
+    }
+    touch();
+    setCart(r.cart);
+    setNotes(r.notes);
+    setPrefill({ skipped: r.skipped, basedOn: formatSaoPauloDay(last.data.when) });
+    go({ kind: "review" }, 1);
+  };
   const showLatest = async () => {
     setConflict(false);
     const fresh = await loadLatest();
@@ -408,6 +438,17 @@ export function OrderFlow({
         </p>
       )}
 
+      {!existing &&
+        last.data &&
+        count === 0 &&
+        !prefill &&
+        view.kind === "step" &&
+        view.index === 0 && (
+          <div className="mt-6">
+            <RepeatLastOrder last={last.data} onUse={repeatLast} />
+          </div>
+        )}
+
       <div className="relative mt-6 overflow-x-clip">
         <AnimatePresence mode="wait" initial={false} custom={dir}>
           <motion.div
@@ -425,7 +466,8 @@ export function OrderFlow({
                 notes={notes}
                 participantName={me.participant.display_name}
                 isUpdate={existing}
-                unavailable={initial.unavailable}
+                unavailable={[...initial.unavailable, ...(prefill?.skipped ?? [])]}
+                basedOn={prefill?.basedOn}
                 onEditStep={editStep}
               />
             ) : (

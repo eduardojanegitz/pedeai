@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/admin-middleware";
 import { mapOrderError, RATE_LIMITED_MESSAGE, type OrderErrorCode } from "@/lib/order-errors";
+import { pickLastOrder, type LastOrder } from "@/lib/last-order";
 import { cleanNote, NOTE_MAX } from "@/lib/order-note";
 import { formatPhone } from "@/lib/phone";
 import { generateRecoveryCode, normalizeRecoveryCode } from "@/lib/recovery-code";
@@ -248,6 +249,31 @@ export const getMyOrder = createServerFn({ method: "POST" })
         note: i.note ?? null,
       })),
     };
+  });
+
+/**
+ * "O de sempre": o último pedido confirmado do participante em OUTRA rodada (a atual fica de fora,
+ * porque nela ele já está montando/editando o pedido). `null` se ainda não tem histórico.
+ */
+export const getLastOrder = createServerFn({ method: "POST" })
+  .validator((d: unknown) =>
+    z.object({ token: tokenSchema, roundId: z.string().uuid().nullable() }).parse(d),
+  )
+  .handler(async ({ data }): Promise<LastOrder | null> => {
+    const db = await admin();
+    const found = await findParticipant(db, data.token);
+    if (!found) return null;
+    let q = db
+      .from("orders")
+      .select("updated_at, rounds(name), order_items(product_id, quantity, note, products(name))")
+      .eq("participant_id", found.id)
+      .eq("status", "confirmed")
+      .order("updated_at", { ascending: false })
+      .limit(5);
+    if (data.roundId) q = q.neq("round_id", data.roundId);
+    const { data: rows, error } = await q;
+    if (error) throw new Error("Não foi possível carregar o seu último pedido.");
+    return pickLastOrder(rows as unknown as Parameters<typeof pickLastOrder>[0]);
   });
 
 export const renameParticipant = createServerFn({ method: "POST" })
