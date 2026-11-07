@@ -141,24 +141,3 @@
   border: 1.5px solid #000;
   padding: 4mm;
 }
-
-/* Fora da tela: a folha de impressão fica escondida e só aparece no papel. */
-.comanda-print-root {
-  display: none;
-}
-@media print {
-  body > *:not(.comanda-print-root) {
-    display: none !important;
-  }
-  .comanda-print-root {
-    display: block !important;
-  }
-  html,
-  body {
-    background: #fff !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    height: auto !important;
-    overflow: visible !important;
-  }
-}

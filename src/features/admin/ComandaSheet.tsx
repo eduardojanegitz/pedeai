@@ -3,6 +3,7 @@ import type { RoundOrder } from "@/lib/orders.functions";
 import { consolidate, groupByCategory, NO_CATEGORY, summarize } from "./orders-logic";
 import { orderTotal, type ChangeKind, type ComandaMode, type PaperSize } from "./comanda";
 import "./comanda.css";
+import "./print-root.css";
 
 type Props = {
   roundName: string;

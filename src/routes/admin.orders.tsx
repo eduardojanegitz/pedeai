@@ -15,6 +15,7 @@ import {
   Printer,
   RefreshCw,
   Search,
+  Share2,
 } from "lucide-react";
 import {
   Dialog,
@@ -27,6 +28,7 @@ import { AlertsBar } from "@/features/admin/AlertsBar";
 import { changedSincePrint, type PrintOptions } from "@/features/admin/comanda";
 import { ConfirmDialog } from "@/features/admin/ConfirmDialog";
 import { PrintDialog } from "@/features/admin/PrintDialog";
+import { ShareDialog } from "@/features/admin/ShareDialog";
 import {
   consolidate,
   emptyFilters,
@@ -105,6 +107,7 @@ function OrdersPage() {
   const [view, setView] = useState<View>("participants");
   const [resetFor, setResetFor] = useState<RoundOrder | null>(null);
   const [printOpen, setPrintOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const [printPreset, setPrintPreset] = useState<Partial<PrintOptions> | undefined>(undefined);
   const changedAfterPrint = useMemo(
     () => changedSincePrint(orders, round?.last_printed_at ?? null),
@@ -167,6 +170,11 @@ function OrdersPage() {
                 </option>
               ))}
             </select>
+            {round && round.state !== "closed" && (
+              <button className={btnPlain} onClick={() => setShareOpen(true)}>
+                <Share2 className="h-4 w-4" aria-hidden /> Compartilhar
+              </button>
+            )}
             <button
               aria-label="Atualizar pedidos"
               className={btnPlain}
@@ -451,6 +459,7 @@ function OrdersPage() {
         </>
       )}
 
+      {round && <ShareDialog open={shareOpen} onOpenChange={setShareOpen} round={round} />}
       {round && (
         <PrintDialog
           open={printOpen}

@@ -1,0 +1,58 @@
+/* Cartaz do QR Code (A4). Mesma ideia da comanda: preto e branco e tipografia própria. */
+.poster {
+  color: #000;
+  background: #fff;
+  font-family: ui-sans-serif, system-ui, "Segoe UI", Arial, sans-serif;
+  text-align: center;
+  padding: 10mm 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.poster :where(h1, p) {
+  margin: 0;
+  padding: 0;
+  font-family: inherit;
+  letter-spacing: normal;
+  text-transform: none;
+}
+.poster__brand {
+  font-weight: 800;
+  letter-spacing: 0.2em;
+  font-size: 14pt;
+}
+.poster__title {
+  font-size: 44pt;
+  font-weight: 800;
+  line-height: 1.05;
+  margin-top: 8mm;
+}
+.poster__round {
+  font-size: 22pt;
+  font-weight: 600;
+  margin-top: 4mm;
+  word-break: break-word;
+}
+.poster__qr {
+  width: 120mm;
+  height: 120mm;
+  margin-top: 14mm;
+  border: 3px solid #000;
+}
+.poster__how {
+  font-size: 16pt;
+  margin-top: 8mm;
+}
+.poster__link {
+  font-size: 20pt;
+  font-weight: 800;
+  margin-top: 6mm;
+  word-break: break-all;
+}
+.poster__deadline {
+  font-size: 18pt;
+  font-weight: 700;
+  margin-top: 10mm;
+  border: 3px solid #000;
+  padding: 3mm 8mm;
+}
