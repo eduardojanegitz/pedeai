@@ -17,6 +17,16 @@ export function pushSupport(): PushSupport {
   return "ok";
 }
 
+/** O que falta neste navegador para o push funcionar (para mostrar ao usuário). */
+export function missingPushParts(): string[] {
+  if (typeof window === "undefined") return [];
+  const out: string[] = [];
+  if (!("serviceWorker" in navigator)) out.push("service worker");
+  if (!("PushManager" in window)) out.push("PushManager");
+  if (!("Notification" in window)) out.push("Notification");
+  return out;
+}
+
 const keyToBytes = (s: string): Uint8Array<ArrayBuffer> => {
   const pad = "=".repeat((4 - (s.length % 4)) % 4);
   const bin = atob((s + pad).replace(/-/g, "+").replace(/_/g, "/"));

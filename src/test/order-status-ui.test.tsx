@@ -57,3 +57,11 @@ describe("OrderStatus", () => {
     expect(document.title).toContain("Pedido pronto");
   });
 });
+
+describe("OrderStatus: aviso push indisponível", () => {
+  it("explica o motivo em vez de esconder o botão", async () => {
+    getMyStatus.mockResolvedValue({ state: "received", doneAt: null, roundName: "Almoço" });
+    wrap();
+    expect(await screen.findByText(/Aviso no celular indisponível/)).toBeInTheDocument();
+  });
+});

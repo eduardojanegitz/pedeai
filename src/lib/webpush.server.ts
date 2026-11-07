@@ -87,6 +87,11 @@ export async function sendPush(
       signal: AbortSignal.timeout(5000),
     });
     if (res.status === 404 || res.status === 410) return "gone";
+    if (!res.ok) {
+      // Só o host e o código (o endereço completo é secreto); o corpo costuma dizer o motivo.
+      const body = (await res.text().catch(() => "")).slice(0, 200);
+      console.error(`push recusado: ${new URL(endpoint).host} ${res.status} ${body}`);
+    }
     return res.ok ? "sent" : "failed";
   } catch (e) {
     console.error("push", e instanceof Error ? e.message : e);

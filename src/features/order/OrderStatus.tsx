@@ -5,6 +5,7 @@ import { PROGRESS_LABEL, type OrderProgress } from "@/lib/order-status";
 import { getPushConfig, removePushSubscription, savePushSubscription } from "@/lib/push.functions";
 import {
   currentSubscription,
+  missingPushParts,
   pushSupport,
   subscribePush,
   unsubscribePush,
@@ -19,7 +20,16 @@ const STEPS: { key: OrderProgress; icon: typeof CheckCircle2 }[] = [
   { key: "ready", icon: PackageCheck },
 ];
 
-type PushState = "loading" | "hidden" | "needs-install" | "denied" | "off" | "on" | "busy";
+type PushState =
+  | "loading"
+  | "unsupported"
+  | "noserver"
+  | "error"
+  | "needs-install"
+  | "denied"
+  | "off"
+  | "on"
+  | "busy";
 
 /** Card de status do pedido + botão para ser avisado no celular quando ficar pronto. */
 export function OrderStatus({ token, roundId }: { token: string; roundId: string }) {
@@ -86,10 +96,10 @@ function PushToggle({ token }: { token: string }) {
     let alive = true;
     void (async () => {
       const sup: PushSupport = pushSupport();
-      if (sup === "unsupported") return alive && setState("hidden");
+      if (sup === "unsupported") return alive && setState("unsupported");
       try {
         const cfg = await getPushConfig();
-        if (!cfg.publicKey) return alive && setState("hidden");
+        if (!cfg.publicKey) return alive && setState("noserver");
         if (!alive) return;
         setKey(cfg.publicKey);
         if (sup === "needs-install") return setState("needs-install");
@@ -97,7 +107,7 @@ function PushToggle({ token }: { token: string }) {
         const sub = await currentSubscription();
         if (alive) setState(sub && Notification.permission === "granted" ? "on" : "off");
       } catch {
-        if (alive) setState("hidden");
+        if (alive) setState("error");
       }
     })();
     return () => {
@@ -136,8 +146,21 @@ function PushToggle({ token }: { token: string }) {
     setState("off");
   };
 
-  if (state === "loading" || state === "hidden") return null;
+  if (state === "loading") return null;
   const base = "mt-4 flex items-center gap-2 text-sm font-medium";
+  if (state === "unsupported" || state === "noserver" || state === "error") {
+    const why =
+      state === "noserver"
+        ? "o servidor ainda não tem as chaves de aviso"
+        : state === "error"
+          ? "não foi possível consultar o servidor"
+          : `este navegador não oferece o recurso (${missingPushParts().join(", ") || "desconhecido"}). No iPhone é preciso iOS 16.4 ou mais novo e abrir o app pela tela inicial; evite abrir por dentro de outros aplicativos`;
+    return (
+      <p className={base}>
+        <BellOff className="h-4 w-4 shrink-0" aria-hidden /> Aviso no celular indisponível: {why}.
+      </p>
+    );
+  }
   if (state === "needs-install")
     return (
       <p className={base}>
