@@ -12,6 +12,7 @@ import {
   FileText,
   KeyRound,
   Pencil,
+  Printer,
   RefreshCw,
   Search,
 } from "lucide-react";
@@ -23,7 +24,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { AlertsBar } from "@/features/admin/AlertsBar";
+import { changedSincePrint, type PrintOptions } from "@/features/admin/comanda";
 import { ConfirmDialog } from "@/features/admin/ConfirmDialog";
+import { PrintDialog } from "@/features/admin/PrintDialog";
 import {
   consolidate,
   emptyFilters,
@@ -101,6 +104,16 @@ function OrdersPage() {
   const [filters, setFilters] = useState<OrderFilters>(emptyFilters);
   const [view, setView] = useState<View>("participants");
   const [resetFor, setResetFor] = useState<RoundOrder | null>(null);
+  const [printOpen, setPrintOpen] = useState(false);
+  const [printPreset, setPrintPreset] = useState<Partial<PrintOptions> | undefined>(undefined);
+  const changedAfterPrint = useMemo(
+    () => changedSincePrint(orders, round?.last_printed_at ?? null),
+    [orders, round?.last_printed_at],
+  );
+  const openPrint = (preset?: Partial<PrintOptions>) => {
+    setPrintPreset(preset);
+    setPrintOpen(true);
+  };
 
   const filtered = useMemo(() => filterOrders(orders, filters), [orders, filters]);
   const stats = useMemo(() => summarize(orders), [orders]);
@@ -233,8 +246,31 @@ function OrdersPage() {
             )}
           </div>
 
+          {changedAfterPrint.size > 0 && round.last_printed_at && (
+            <div
+              role="status"
+              className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border-2 border-foreground bg-accent p-3 text-accent-foreground"
+            >
+              <p className="text-sm font-bold">
+                {changedAfterPrint.size === 1
+                  ? "1 pedido mudou depois da última comanda impressa"
+                  : `${changedAfterPrint.size} pedidos mudaram depois da última comanda impressa`}{" "}
+                ({formatSaoPauloTime(round.last_printed_at)})
+              </p>
+              <button
+                type="button"
+                className={btnPlain}
+                onClick={() => openPrint({ mode: "people", onlyChanged: true })}
+              >
+                <Printer className="h-4 w-4" aria-hidden /> Imprimir só os alterados
+              </button>
+            </div>
+          )}
           <div className="mb-6 flex flex-wrap gap-2">
-            <button className={btnPrimary} onClick={run(() => exportPdf(round.name, orders))}>
+            <button className={btnPrimary} onClick={() => openPrint()}>
+              <Printer className="h-4 w-4" aria-hidden /> Imprimir comanda
+            </button>
+            <button className={btnPlain} onClick={run(() => exportPdf(round.name, orders))}>
               <FileText className="h-4 w-4" aria-hidden /> PDF
             </button>
             <button className={btnPlain} onClick={run(() => exportExcel(round.name, orders))}>
@@ -360,6 +396,7 @@ function OrdersPage() {
                   order={o}
                   index={i}
                   isNew={alerts.newIds.has(o.order_id)}
+                  afterPrint={changedAfterPrint.get(o.order_id) ?? null}
                   onReset={() => setResetFor(o)}
                 />
               ))}
@@ -414,6 +451,15 @@ function OrdersPage() {
         </>
       )}
 
+      {round && (
+        <PrintDialog
+          open={printOpen}
+          onOpenChange={setPrintOpen}
+          round={round}
+          orders={orders}
+          preset={printPreset}
+        />
+      )}
       <ResetCodeFlow order={resetFor} onClose={() => setResetFor(null)} />
     </div>
   );
@@ -423,11 +469,14 @@ function ParticipantCard({
   order: o,
   index,
   isNew,
+  afterPrint,
   onReset,
 }: {
   order: RoundOrder;
   index: number;
   isNew: boolean;
+  /** Mudou depois da última comanda impressa (novo ou editado), ou null. */
+  afterPrint: "new" | "edited" | null;
   onReset: () => void;
 }) {
   const reduce = useReducedMotion();
@@ -458,6 +507,12 @@ function ParticipantCard({
           </span>
         )}
       </div>
+      {afterPrint && (
+        <p className="mt-2 inline-flex items-center gap-1.5 rounded-full border-2 border-foreground px-2.5 py-0.5 text-xs font-bold">
+          <Printer className="h-3 w-3" aria-hidden /> {afterPrint === "new" ? "Novo" : "Alterado"}{" "}
+          após a impressão
+        </p>
+      )}
       <div className="mt-3 space-y-2">
         {groups.map((g) => (
           <div key={g.category ?? NO_CATEGORY}>

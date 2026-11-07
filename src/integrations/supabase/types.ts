@@ -244,6 +244,7 @@ export type Database = {
       rounds: {
         Row: {
           closes_at: string | null;
+          last_printed_at: string | null;
           opens_at: string | null;
           closed_at: string | null;
           id: string;
@@ -253,6 +254,7 @@ export type Database = {
         };
         Insert: {
           closes_at?: string | null;
+          last_printed_at?: string | null;
           opens_at?: string | null;
           closed_at?: string | null;
           id?: string;
@@ -262,6 +264,7 @@ export type Database = {
         };
         Update: {
           closes_at?: string | null;
+          last_printed_at?: string | null;
           opens_at?: string | null;
           closed_at?: string | null;
           id?: string;

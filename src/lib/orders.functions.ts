@@ -31,6 +31,11 @@ export type Round = {
   /** Estado efetivo calculado no servidor: aguardando abertura, aberta ou encerrada (manual ou por horário). */
   state: RoundState;
 };
+/** Rodada como o painel a vê: com o instante da última comanda impressa. */
+export type AdminRound = Round & {
+  /** Até quando (instante dos dados) a comanda já foi impressa; null = nunca. */
+  last_printed_at: string | null;
+};
 /** Rodada atual + horário do servidor (para o cliente exibir contagem regressiva sem confiar no relógio local). */
 export type ActiveRound = Round & { server_now: string };
 
@@ -71,7 +76,7 @@ export const getActiveRound = createServerFn({ method: "GET" }).handler(
 
 export const listRounds = createServerFn({ method: "GET" })
   .middleware([requireAdmin])
-  .handler(async (): Promise<Round[]> => {
+  .handler(async (): Promise<AdminRound[]> => {
     const db = await admin();
     const { data, error } = await db
       .from("rounds")
@@ -430,6 +435,28 @@ export const getRoundOrders = createServerFn({ method: "GET" })
         ),
     }));
     return orders;
+  });
+
+/**
+ * Registra que a comanda foi impressa com os dados até `printedAt` (o instante dos pedidos que
+ * estavam na folha, não o do clique): qualquer pedido alterado depois disso aparece como "alterado".
+ * Nunca volta no tempo.
+ */
+export const markRoundPrinted = createServerFn({ method: "POST" })
+  .middleware([requireAdmin])
+  .validator((d: unknown) =>
+    z.object({ roundId: z.string().uuid(), printedAt: z.string().datetime() }).parse(d),
+  )
+  .handler(async ({ data }) => {
+    const db = await admin();
+    const at = new Date(Math.min(Date.parse(data.printedAt), Date.now())).toISOString();
+    const { error } = await db
+      .from("rounds")
+      .update({ last_printed_at: at })
+      .eq("id", data.roundId)
+      .or(`last_printed_at.is.null,last_printed_at.lt.${at}`);
+    if (error) throw new Error("Não foi possível registrar a impressão.");
+    return { ok: true, printedAt: at };
   });
 
 /** Linha mínima de cada pedido da rodada, para detectar novidades sem baixar o conteúdo todo. */
