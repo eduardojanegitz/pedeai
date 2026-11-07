@@ -56,6 +56,7 @@ const order = (
   created_at: created,
   updated_at: updated,
   edited: updated !== created,
+  paid_at: null,
   items,
 });
 

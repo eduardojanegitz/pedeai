@@ -12,7 +12,7 @@ import {
 import { copyText } from "@/lib/export";
 import type { RoundState } from "@/lib/orders.functions";
 import { qrPngBlob } from "@/lib/qr-image";
-import { QrCode } from "./QrCode";
+import { QrCode } from "@/components/QrCode";
 import { SharePoster } from "./SharePoster";
 import {
   isLocalAddress,

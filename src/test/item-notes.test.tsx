@@ -113,6 +113,7 @@ describe("painel e exportação", () => {
     created_at: "2026-11-06T12:00:00Z",
     updated_at: "2026-11-06T12:00:00Z",
     edited: false,
+    paid_at: null,
     items: [item("f", "Frango", note)],
   });
   const orders = [order("1", "João", "sem cebola"), order("2", "Maria", null)];

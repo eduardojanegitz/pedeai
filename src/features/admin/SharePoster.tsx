@@ -1,5 +1,5 @@
 import { formatSaoPaulo } from "@/lib/format";
-import { QrCode } from "./QrCode";
+import { QrCode } from "@/components/QrCode";
 import "./share-poster.css";
 
 /** Cartaz A4 com o QR Code, para colar no mural ou na porta. Preto e branco (impressora comum). */

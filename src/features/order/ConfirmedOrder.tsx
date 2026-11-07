@@ -18,6 +18,7 @@ import { Logo } from "@/components/brand/Logo";
 import { formatBRL, formatSaoPauloTime } from "@/lib/format";
 import { cancelOrder, type ActiveRound, type MyOrder } from "@/lib/orders.functions";
 import { buildSteps, selectedLines, totalCents, type Cart } from "./logic";
+import { PixPayment } from "./PixPayment";
 import { RecoveryDialog } from "./RecoveryDialog";
 import { clearDraft } from "./storage";
 import type { Menu } from "./types";
@@ -62,6 +63,7 @@ export function ConfirmedOrder({
       clearDraft(round.id, me.participant.id);
       toast.success("Pedido cancelado");
       await qc.invalidateQueries({ queryKey: ["my-order"] });
+      void qc.invalidateQueries({ queryKey: ["my-payment"] });
     } catch (e) {
       toast.error(errMsg(e));
     } finally {
@@ -143,6 +145,8 @@ export function ConfirmedOrder({
           </p>
         )}
       </div>
+
+      <PixPayment token={token} roundId={round.id} />
 
       {canEdit ? (
         <>

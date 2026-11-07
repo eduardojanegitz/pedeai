@@ -23,6 +23,57 @@ export type Database = {
         };
         Relationships: [];
       };
+      admin_settings: {
+        Row: {
+          admin_id: string;
+          pix_city: string | null;
+          pix_key: string | null;
+          pix_key_type: string | null;
+          pix_name: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          admin_id: string;
+          pix_city?: string | null;
+          pix_key?: string | null;
+          pix_key_type?: string | null;
+          pix_name?: string | null;
+          updated_at?: string;
+        };
+        Update: {
+          admin_id?: string;
+          pix_city?: string | null;
+          pix_key?: string | null;
+          pix_key_type?: string | null;
+          pix_name?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      pix_key_audit: {
+        Row: {
+          admin_id: string;
+          changed_at: string;
+          id: number;
+          new_key_masked: string | null;
+          old_key_masked: string | null;
+        };
+        Insert: {
+          admin_id: string;
+          changed_at?: string;
+          id?: number;
+          new_key_masked?: string | null;
+          old_key_masked?: string | null;
+        };
+        Update: {
+          admin_id?: string;
+          changed_at?: string;
+          id?: number;
+          new_key_masked?: string | null;
+          old_key_masked?: string | null;
+        };
+        Relationships: [];
+      };
       rate_limits: {
         Row: {
           hits: number;
@@ -116,6 +167,8 @@ export type Database = {
       orders: {
         Row: {
           last_request_id: string | null;
+          paid_at: string | null;
+          paid_by: string | null;
           version: number;
           created_at: string;
           id: string;
@@ -126,6 +179,8 @@ export type Database = {
         };
         Insert: {
           last_request_id?: string | null;
+          paid_at?: string | null;
+          paid_by?: string | null;
           version?: number;
           created_at?: string;
           id?: string;
@@ -136,6 +191,8 @@ export type Database = {
         };
         Update: {
           last_request_id?: string | null;
+          paid_at?: string | null;
+          paid_by?: string | null;
           version?: number;
           created_at?: string;
           id?: string;
@@ -244,6 +301,7 @@ export type Database = {
       rounds: {
         Row: {
           closes_at: string | null;
+          created_by: string | null;
           last_printed_at: string | null;
           opens_at: string | null;
           closed_at: string | null;
@@ -254,6 +312,7 @@ export type Database = {
         };
         Insert: {
           closes_at?: string | null;
+          created_by?: string | null;
           last_printed_at?: string | null;
           opens_at?: string | null;
           closed_at?: string | null;
@@ -264,6 +323,7 @@ export type Database = {
         };
         Update: {
           closes_at?: string | null;
+          created_by?: string | null;
           last_printed_at?: string | null;
           opens_at?: string | null;
           closed_at?: string | null;

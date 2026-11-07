@@ -16,6 +16,8 @@ import {
   RefreshCw,
   Search,
   Share2,
+  BadgeCheck,
+  Undo2,
 } from "lucide-react";
 import {
   Dialog,
@@ -35,6 +37,7 @@ import {
   filterOrders,
   groupByCategory,
   NO_CATEGORY,
+  orderValue,
   summarize,
   type OrderFilters,
 } from "@/features/admin/orders-logic";
@@ -46,6 +49,7 @@ import {
   getRoundOrders,
   listRounds,
   resetParticipantCode,
+  setOrderPaid,
   type RoundOrder,
 } from "@/lib/orders.functions";
 
@@ -73,15 +77,18 @@ function Tile({
   label,
   children,
   tone,
+  sub,
 }: {
   label: string;
   children: React.ReactNode;
   tone: string;
+  sub?: React.ReactNode;
 }) {
   return (
     <div className={`pop-card p-4 ${tone}`}>
       <p className="text-xs font-bold uppercase tracking-widest">{label}</p>
       <p className="font-display text-5xl leading-none">{children}</p>
+      {sub && <p className="mt-1 text-xs font-semibold">{sub}</p>}
     </div>
   );
 }
@@ -129,7 +136,22 @@ function OrdersPage() {
       ),
     [orders, filters.category],
   );
-  const filtering = filters.search || filters.category || filters.productId || filters.editedOnly;
+  const filtering =
+    filters.search ||
+    filters.category ||
+    filters.productId ||
+    filters.editedOnly ||
+    filters.payment;
+  const markPaid = useServerFn(setOrderPaid);
+  const togglePaid = async (o: RoundOrder) => {
+    try {
+      await markPaid({ data: { orderId: o.order_id, paid: !o.paid_at } });
+      await q.refetch();
+      toast.success(o.paid_at ? "Pagamento desmarcado" : `${o.participant}: pago`);
+    } catch (e) {
+      toast.error(errMsg(e));
+    }
+  };
 
   const run = (fn: () => Promise<void>, ok?: string) => async () => {
     try {
@@ -248,7 +270,16 @@ function OrdersPage() {
               <Counter value={stats.edited} />
             </Tile>
             {stats.totalCents != null && (
-              <Tile label="Valor" tone="bg-card">
+              <Tile
+                label="Valor"
+                tone="bg-card"
+                sub={
+                  <>
+                    Recebido {formatBRL(stats.paidCents ?? 0)} · a receber{" "}
+                    {formatBRL(stats.pendingCents ?? 0)}
+                  </>
+                }
+              >
                 <span className="text-4xl">{formatBRL(stats.totalCents)}</span>
               </Tile>
             )}
@@ -359,6 +390,28 @@ function OrdersPage() {
               />
               <span className="text-sm font-semibold">Só pedidos editados</span>
             </label>
+            {stats.totalCents != null && (
+              <div>
+                <label htmlFor="f-pay" className="sr-only">
+                  Pagamento
+                </label>
+                <select
+                  id="f-pay"
+                  value={filters.payment}
+                  onChange={(e) =>
+                    setFilters((f) => ({
+                      ...f,
+                      payment: e.target.value as OrderFilters["payment"],
+                    }))
+                  }
+                  className={field}
+                >
+                  <option value="">Todos os pagamentos</option>
+                  <option value="pending">A receber</option>
+                  <option value="paid">Pagos</option>
+                </select>
+              </div>
+            )}
           </section>
 
           <div
@@ -405,6 +458,7 @@ function OrdersPage() {
                   index={i}
                   isNew={alerts.newIds.has(o.order_id)}
                   afterPrint={changedAfterPrint.get(o.order_id) ?? null}
+                  onTogglePaid={() => void togglePaid(o)}
                   onReset={() => setResetFor(o)}
                 />
               ))}
@@ -479,6 +533,7 @@ function ParticipantCard({
   index,
   isNew,
   afterPrint,
+  onTogglePaid,
   onReset,
 }: {
   order: RoundOrder;
@@ -486,10 +541,13 @@ function ParticipantCard({
   isNew: boolean;
   /** Mudou depois da última comanda impressa (novo ou editado), ou null. */
   afterPrint: "new" | "edited" | null;
+  onTogglePaid: () => void;
   onReset: () => void;
 }) {
   const reduce = useReducedMotion();
   const groups = groupByCategory(o.items);
+  const value = orderValue(o);
+  const changedAfterPay = !!o.paid_at && Date.parse(o.updated_at) > Date.parse(o.paid_at);
   return (
     <motion.li
       initial={reduce ? false : { opacity: 0, y: 14 }}
@@ -516,6 +574,32 @@ function ParticipantCard({
           </span>
         )}
       </div>
+      {value != null && (
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-2xl border-2 border-foreground px-3 py-2">
+          <p className="text-sm font-bold">
+            {formatBRL(value)}{" "}
+            <span className={o.paid_at ? "text-primary" : "text-muted-foreground"}>
+              {o.paid_at ? `· pago ${formatSaoPauloTime(o.paid_at)}` : "· a receber"}
+            </span>
+          </p>
+          <button type="button" className={btnPlain} onClick={onTogglePaid}>
+            {o.paid_at ? (
+              <>
+                <Undo2 className="h-4 w-4" aria-hidden /> Desfazer
+              </>
+            ) : (
+              <>
+                <BadgeCheck className="h-4 w-4" aria-hidden /> Marcar como pago
+              </>
+            )}
+          </button>
+          {changedAfterPay && (
+            <p className="w-full text-xs font-bold text-destructive">
+              O pedido mudou depois do pagamento: confira se o valor ainda confere.
+            </p>
+          )}
+        </div>
+      )}
       {afterPrint && (
         <p className="mt-2 inline-flex items-center gap-1.5 rounded-full border-2 border-foreground px-2.5 py-0.5 text-xs font-bold">
           <Printer className="h-3 w-3" aria-hidden /> {afterPrint === "new" ? "Novo" : "Alterado"}{" "}

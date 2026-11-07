@@ -5,6 +5,7 @@ import { mapOrderError, RATE_LIMITED_MESSAGE, type OrderErrorCode } from "@/lib/
 import { pickLastOrder, type LastOrder } from "@/lib/last-order";
 import { cleanNote, NOTE_MAX } from "@/lib/order-note";
 import { formatPhone } from "@/lib/phone";
+import { pixPayload, maskPixKey, type PixKeyType } from "@/lib/pix";
 import { generateRecoveryCode, normalizeRecoveryCode } from "@/lib/recovery-code";
 import { scheduleSchema } from "@/lib/schedule";
 
@@ -112,11 +113,12 @@ export const openRound = createServerFn({ method: "POST" })
       })
       .parse(d),
   )
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
     const db = await admin();
     await closeExpiredRounds(db);
     const { error } = await db.from("rounds").insert({
       name: data.name,
+      created_by: context.adminId,
       opens_at: data.schedule?.opensAt ?? null,
       closes_at: data.schedule?.closesAt ?? null,
     });
@@ -276,6 +278,113 @@ export const getLastOrder = createServerFn({ method: "POST" })
     return pickLastOrder(rows as unknown as Parameters<typeof pickLastOrder>[0]);
   });
 
+// ---------- Pagamento (Pix) do participante ----------
+
+export type MyPayment =
+  | { state: "unavailable"; reason: "no_order" | "no_prices" | "no_pix" }
+  | {
+      state: "pay";
+      totalCents: number;
+      /** Código Pix "copia e cola" (também vira QR Code). */
+      payload: string;
+      receiver: string;
+      keyMasked: string;
+    }
+  | { state: "paid"; totalCents: number; paidAt: string; changedAfter: boolean };
+
+/**
+ * Quanto o participante deve e como pagar (Pix do organizador dono da rodada). O valor é calculado
+ * aqui, no servidor, pelos preços do banco: nunca vem do navegador. Itens sem preço não são cobrados.
+ * A chave só é revelada a quem tem pedido confirmado nesta rodada.
+ */
+export const getMyPayment = createServerFn({ method: "POST" })
+  .validator((d: unknown) => z.object({ token: tokenSchema, roundId: z.string().uuid() }).parse(d))
+  .handler(async ({ data }): Promise<MyPayment> => {
+    const db = await admin();
+    const found = await findParticipant(db, data.token);
+    if (!found) return { state: "unavailable", reason: "no_order" };
+    const { data: order } = await db
+      .from("orders")
+      .select("status, paid_at, updated_at, order_items(quantity, products(price_cents))")
+      .eq("round_id", data.roundId)
+      .eq("participant_id", found.id)
+      .maybeSingle();
+    if (!order || order.status !== "confirmed") return { state: "unavailable", reason: "no_order" };
+
+    let total = 0;
+    let priced = false;
+    for (const i of order.order_items as unknown as {
+      quantity: number;
+      products: { price_cents: number | null } | null;
+    }[]) {
+      const price = i.products?.price_cents;
+      if (price != null) {
+        total += price * i.quantity;
+        priced = true;
+      }
+    }
+    if (!priced || total <= 0) return { state: "unavailable", reason: "no_prices" };
+
+    if (order.paid_at) {
+      return {
+        state: "paid",
+        totalCents: total,
+        paidAt: order.paid_at,
+        changedAfter: Date.parse(order.updated_at) > Date.parse(order.paid_at),
+      };
+    }
+
+    // De quem é o Pix: do organizador que abriu a rodada. Rodadas antigas (sem dono) usam o único
+    // organizador que configurou Pix; se houver mais de um, não há como saber, então não mostra.
+    const { data: round } = await db
+      .from("rounds")
+      .select("created_by")
+      .eq("id", data.roundId)
+      .maybeSingle();
+    const cols = "pix_key, pix_key_type, pix_name, pix_city";
+    let cfg: {
+      pix_key: string | null;
+      pix_key_type: string | null;
+      pix_name: string | null;
+      pix_city: string | null;
+    } | null = null;
+    if (round?.created_by) {
+      const { data: own } = await db
+        .from("admin_settings")
+        .select(cols)
+        .eq("admin_id", round.created_by)
+        .maybeSingle();
+      cfg = own;
+    } else {
+      const { data: all } = await db
+        .from("admin_settings")
+        .select(cols)
+        .not("pix_key", "is", null)
+        .limit(2);
+      if (all?.length === 1) cfg = all[0] ?? null;
+    }
+    if (!cfg?.pix_key || !cfg.pix_key_type || !cfg.pix_name || !cfg.pix_city) {
+      return { state: "unavailable", reason: "no_pix" };
+    }
+    try {
+      return {
+        state: "pay",
+        totalCents: total,
+        payload: pixPayload({
+          key: cfg.pix_key,
+          name: cfg.pix_name,
+          city: cfg.pix_city,
+          amountCents: total,
+        }),
+        receiver: cfg.pix_name,
+        keyMasked: maskPixKey(cfg.pix_key_type as PixKeyType, cfg.pix_key),
+      };
+    } catch (e) {
+      console.error(e);
+      return { state: "unavailable", reason: "no_pix" };
+    }
+  });
+
 export const renameParticipant = createServerFn({ method: "POST" })
   .validator((d: unknown) =>
     z
@@ -401,6 +510,8 @@ export type RoundOrder = {
   updated_at: string;
   /** Pedido alterado depois da confirmação inicial. */
   edited: boolean;
+  /** Quando o organizador marcou como pago (null = pendente). */
+  paid_at: string | null;
   items: RoundOrderItem[];
 };
 
@@ -412,7 +523,7 @@ export const getRoundOrders = createServerFn({ method: "GET" })
     const { data: rows, error } = await db
       .from("orders")
       .select(
-        "id, created_at, updated_at, version, participant_id, participants(display_name, phone_e164), order_items(quantity, note, product_id, products(name, price_cents, categories(name, position)))",
+        "id, created_at, updated_at, version, paid_at, participant_id, participants(display_name, phone_e164), order_items(quantity, note, product_id, products(name, price_cents, categories(name, position)))",
       )
       .eq("round_id", data.roundId)
       .eq("status", "confirmed")
@@ -423,6 +534,7 @@ export const getRoundOrders = createServerFn({ method: "GET" })
       created_at: string;
       updated_at: string;
       version: number;
+      paid_at: string | null;
       participant_id: string;
       participants: { display_name: string; phone_e164: string | null } | null;
       order_items: {
@@ -444,6 +556,7 @@ export const getRoundOrders = createServerFn({ method: "GET" })
       created_at: o.created_at,
       updated_at: o.updated_at,
       edited: o.version > 1,
+      paid_at: o.paid_at,
       items: o.order_items
         .map((i) => ({
           product_id: i.product_id,
@@ -483,6 +596,27 @@ export const markRoundPrinted = createServerFn({ method: "POST" })
       .or(`last_printed_at.is.null,last_printed_at.lt.${at}`);
     if (error) throw new Error("Não foi possível registrar a impressão.");
     return { ok: true, printedAt: at };
+  });
+
+/** Marca (ou desmarca) um pedido como pago. Só o organizador faz isso; não altera o pedido em si. */
+export const setOrderPaid = createServerFn({ method: "POST" })
+  .middleware([requireAdmin])
+  .validator((d: unknown) => z.object({ orderId: z.string().uuid(), paid: z.boolean() }).parse(d))
+  .handler(async ({ data, context }) => {
+    const db = await admin();
+    const { data: row, error } = await db
+      .from("orders")
+      .update({
+        paid_at: data.paid ? new Date().toISOString() : null,
+        paid_by: data.paid ? context.adminId : null,
+      })
+      .eq("id", data.orderId)
+      .eq("status", "confirmed")
+      .select("paid_at")
+      .maybeSingle();
+    if (error) throw new Error("Não foi possível atualizar o pagamento.");
+    if (!row) throw new Error("Pedido não encontrado ou cancelado.");
+    return { ok: true, paidAt: row.paid_at };
   });
 
 /** Linha mínima de cada pedido da rodada, para detectar novidades sem baixar o conteúdo todo. */

@@ -90,6 +90,7 @@ export async function exportExcel(roundName: string, orders: RoundOrder[]) {
       Quantidade: i.quantity,
       Observação: i.note ?? "",
       ...(priced ? { "Preço unit.": i.price_cents != null ? i.price_cents / 100 : "" } : {}),
+      ...(priced ? { Pagamento: o.paid_at ? "Pago" : "A receber" } : {}),
       "Pedido em": stamp(o.created_at),
       "Última edição": stamp(o.updated_at),
     })),
@@ -108,7 +109,7 @@ export async function exportExcel(roundName: string, orders: RoundOrder[]) {
     { wch: 30 },
     { wch: 11 },
     { wch: 28 },
-    ...(priced ? [{ wch: 11 }] : []),
+    ...(priced ? [{ wch: 11 }, { wch: 11 }] : []),
     { wch: 17 },
     { wch: 17 },
   ];

@@ -283,6 +283,7 @@ export function OrderFlow({
       clearDraft(round.id, me.participant.id);
       // Só avança depois de reler o pedido salvo: a tela nunca mostra sucesso sem confirmação do servidor.
       await qc.invalidateQueries({ queryKey: ["my-order"] });
+      void qc.invalidateQueries({ queryKey: ["my-payment"] }); // o valor pode ter mudado
       onSaved({
         isUpdate: existing,
         items: steps.flatMap((s) =>
