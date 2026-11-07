@@ -8,6 +8,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, Pencil } from "lucide-react";
 import { BagBadge } from "@/components/brand/BagBadge";
+import { PixInSuccess } from "./PixInSuccess";
 import { btnPlain, btnPrimary } from "./ui";
 import {
   TIMELINE,
@@ -101,6 +102,8 @@ export function OrderSuccess({
   items,
   onView,
   onEdit,
+  token,
+  roundId,
   forceScene,
   reduceMotion,
 }: {
@@ -108,6 +111,9 @@ export function OrderSuccess({
   items: SuccessItem[];
   onView: () => void;
   onEdit?: (() => void) | undefined;
+  /** Com estes dois, a mensagem final mostra o Pix a pagar (quando houver). */
+  token?: string | undefined;
+  roundId?: string | undefined;
   /** Fixa uma cena (verificação visual). */
   forceScene?: Scene | undefined;
   /** Sobrepõe a preferência do sistema (testes). */
@@ -116,6 +122,8 @@ export function OrderSuccess({
   const system = useReducedMotion() ?? false;
   const reduce = reduceMotion ?? system;
   const [skipped, setSkipped] = useState(false);
+  // Enquanto não se sabe se há Pix a pagar (ou se há), a atualização não fecha sozinha.
+  const [payHold, setPayHold] = useState(!!token && !!roundId);
   const scene = useSceneTimeline(variant, { reduce, skipped, force: forceScene });
   const particles = useMemo(makeParticles, []);
   const primary = useRef<HTMLButtonElement>(null);
@@ -149,13 +157,13 @@ export function OrderSuccess({
 
   // Atualização: fecha sozinha depois de mostrar a mensagem (o pedido continua visível na tela seguinte).
   useEffect(() => {
-    if (!updated || !final || forceScene) return;
+    if (!updated || !final || forceScene || payHold) return;
     const wait = reduce
       ? UPDATE_AUTO_CLOSE_MS
       : Math.max(1200, UPDATE_AUTO_CLOSE_MS - TIMELINE.updated.final);
     const t = setTimeout(onView, wait);
     return () => clearTimeout(t);
-  }, [updated, final, reduce, onView, forceScene]);
+  }, [updated, final, reduce, onView, forceScene, payHold]);
 
   const bagAnimate: TargetAndTransition =
     scene === "cart"
@@ -330,6 +338,12 @@ export function OrderSuccess({
                       {extra > 0 ? ` e mais ${extra}` : ""}
                     </span>
                   </p>
+                )}
+
+                {token && roundId && (
+                  <div className="mx-auto mt-4 max-w-sm">
+                    <PixInSuccess token={token} roundId={roundId} onSettled={setPayHold} />
+                  </div>
                 )}
 
                 <div className="mt-6 flex flex-col items-stretch justify-center gap-2 sm:flex-row">

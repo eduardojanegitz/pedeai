@@ -1,26 +1,26 @@
-import { useQuery } from "@tanstack/react-query";
 import { motion, useReducedMotion } from "motion/react";
 import { BadgeCheck, Copy, Landmark } from "lucide-react";
 import { toast } from "sonner";
 import { QrCode } from "@/components/QrCode";
 import { copyToClipboard } from "@/lib/clipboard";
 import { formatBRL, formatSaoPauloTime } from "@/lib/format";
-import { getMyPayment } from "@/lib/orders.functions";
-import { btnPlain } from "./ui";
+import type { MyPayment } from "@/lib/orders.functions";
+import { btnPlain, btnPrimary } from "./ui";
+import { useMyPayment } from "./useMyPayment";
 
 /**
- * Pagamento por Pix do pedido confirmado: valor, QR Code e "copia e cola" do organizador que abriu
- * a rodada. Some se não houver preço ou Pix configurado. O organizador confirma o recebimento.
+ * Pagamento por Pix do pedido: valor, QR Code e "copia e cola" do organizador que abriu a rodada.
+ * `compact` é a versão da tela de confirmação (QR menor e chamada de "último passo"); sem ela,
+ * é o card da tela do pedido. Some se não houver preço ou Pix. O organizador confirma o recebimento.
  */
-export function PixPayment({ token, roundId }: { token: string; roundId: string }) {
+export function PixPaymentView({
+  payment: p,
+  compact = false,
+}: {
+  payment: MyPayment | undefined;
+  compact?: boolean;
+}) {
   const reduce = useReducedMotion();
-  const q = useQuery({
-    queryKey: ["my-payment", token, roundId],
-    queryFn: () => getMyPayment({ data: { token, roundId } }),
-    refetchInterval: 15_000,
-    retry: false,
-  });
-  const p = q.data;
   if (!p || p.state === "unavailable") return null;
 
   if (p.state === "paid") {
@@ -29,7 +29,7 @@ export function PixPayment({ token, roundId }: { token: string; roundId: string 
         initial={reduce ? false : { opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         aria-label="Pagamento"
-        className="pop-card mt-4 bg-secondary p-4 text-secondary-foreground"
+        className={`pop-card bg-secondary p-4 text-left text-secondary-foreground ${compact ? "" : "mt-4"}`}
       >
         <p className="flex items-center gap-2 text-lg font-bold">
           <BadgeCheck className="h-5 w-5" aria-hidden /> Pagamento confirmado
@@ -61,17 +61,30 @@ export function PixPayment({ token, roundId }: { token: string; roundId: string 
       initial={reduce ? false : { opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       aria-label="Pagamento por Pix"
-      className="pop-card mt-4 p-4"
+      className={`pop-card p-4 text-left ${compact ? "bg-card" : "mt-4"}`}
     >
-      <p className="flex items-center gap-2 text-sm font-bold uppercase tracking-widest">
-        <Landmark className="h-4 w-4" aria-hidden /> Pagar por Pix
+      {compact ? (
+        <>
+          <p className="flex items-center gap-2 text-sm font-bold uppercase tracking-widest text-primary">
+            <Landmark className="h-4 w-4" aria-hidden /> Último passo: pagar por Pix
+          </p>
+          <p className="mt-1 text-sm font-semibold">
+            Seu pedido está confirmado, mas o pagamento ainda não foi feito.
+          </p>
+        </>
+      ) : (
+        <p className="flex items-center gap-2 text-sm font-bold uppercase tracking-widest">
+          <Landmark className="h-4 w-4" aria-hidden /> Pagar por Pix
+        </p>
+      )}
+      <p className={`mt-1 font-display leading-none ${compact ? "text-4xl" : "text-5xl"}`}>
+        {formatBRL(p.totalCents)}
       </p>
-      <p className="mt-1 font-display text-5xl leading-none">{formatBRL(p.totalCents)}</p>
       <div className="mt-3 grid gap-4 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-center">
         <QrCode
           text={p.payload}
           label={`QR Code Pix de ${formatBRL(p.totalCents)}`}
-          className="mx-auto h-48 w-48 rounded-2xl border-2 border-foreground"
+          className={`mx-auto rounded-2xl border-2 border-foreground ${compact ? "h-40 w-40" : "h-48 w-48"}`}
         />
         <div className="min-w-0">
           <p className="text-sm">
@@ -81,7 +94,11 @@ export function PixPayment({ token, roundId }: { token: string; roundId: string 
             No app do seu banco: Pix → Pix Copia e Cola (ou ler o QR Code). O valor já vem
             preenchido.
           </p>
-          <button type="button" className={`${btnPlain} mt-3`} onClick={() => void copy()}>
+          <button
+            type="button"
+            className={`${compact ? btnPrimary : btnPlain} mt-3`}
+            onClick={() => void copy()}
+          >
             <Copy className="h-4 w-4" aria-hidden /> Copiar código Pix
           </button>
           <p className="mt-2 text-xs text-muted-foreground">
@@ -91,4 +108,10 @@ export function PixPayment({ token, roundId }: { token: string; roundId: string 
       </div>
     </motion.section>
   );
+}
+
+/** Card de pagamento da tela do pedido (busca os dados sozinho). */
+export function PixPayment({ token, roundId }: { token: string; roundId: string }) {
+  const q = useMyPayment(token, roundId);
+  return <PixPaymentView payment={q.data} />;
 }

@@ -21,6 +21,7 @@ import { NOTE_MAX } from "@/lib/order-note";
 import {
   getLastOrder,
   getMyOrder,
+  getMyPayment,
   submitOrder,
   type ActiveRound,
   type MyOrder,
@@ -283,7 +284,12 @@ export function OrderFlow({
       clearDraft(round.id, me.participant.id);
       // Só avança depois de reler o pedido salvo: a tela nunca mostra sucesso sem confirmação do servidor.
       await qc.invalidateQueries({ queryKey: ["my-order"] });
-      void qc.invalidateQueries({ queryKey: ["my-payment"] }); // o valor pode ter mudado
+      // O valor pode ter mudado: busca já, para o Pix estar pronto quando a mensagem de confirmação abrir.
+      void qc.prefetchQuery({
+        queryKey: ["my-payment", token, round.id],
+        queryFn: () => getMyPayment({ data: { token, roundId: round.id } }),
+        staleTime: 0,
+      });
       onSaved({
         isUpdate: existing,
         items: steps.flatMap((s) =>

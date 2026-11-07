@@ -149,6 +149,8 @@ function Participant({
         <OrderSuccess
           variant={celebrate.update ? "updated" : "created"}
           items={celebrate.items}
+          token={token!}
+          roundId={round.id}
           onView={() => setCelebrate(null)}
           onEdit={() => {
             setCelebrate(null);
