@@ -432,6 +432,46 @@ export const getRoundOrders = createServerFn({ method: "GET" })
     return orders;
   });
 
+/** Linha mínima de cada pedido da rodada, para detectar novidades sem baixar o conteúdo todo. */
+export type PulseRow = {
+  id: string;
+  version: number;
+  status: "confirmed" | "cancelled";
+  name: string;
+};
+
+/**
+ * "Pulso" da rodada: id, versão, situação e nome de cada pedido (incluindo cancelados).
+ * Bem mais leve que `getRoundOrders`; o painel consulta a cada poucos segundos para tocar o alerta
+ * e só então recarrega a lista completa.
+ */
+export const getOrdersPulse = createServerFn({ method: "GET" })
+  .middleware([requireAdmin])
+  .validator((d: unknown) => z.object({ roundId: z.string().uuid() }).parse(d))
+  .handler(async ({ data }): Promise<PulseRow[]> => {
+    const db = await admin();
+    const { data: rows, error } = await db
+      .from("orders")
+      .select("id, version, status, participants(display_name)")
+      .eq("round_id", data.roundId)
+      .order("created_at")
+      .limit(1000);
+    if (error) throw new Error("Não foi possível consultar os pedidos.");
+    return (
+      rows as unknown as {
+        id: string;
+        version: number;
+        status: string;
+        participants: { display_name: string } | null;
+      }[]
+    ).map((r) => ({
+      id: r.id,
+      version: r.version,
+      status: r.status === "cancelled" ? "cancelled" : "confirmed",
+      name: r.participants?.display_name ?? "Alguém",
+    }));
+  });
+
 /**
  * Redefine o código de recuperação de um participante (quem perdeu o código e não está mais logado).
  * Devolve o código novo UMA vez, para o organizador repassar. Confira a identidade antes (ex.: pelo celular).

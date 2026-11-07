@@ -22,6 +22,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { AlertsBar } from "@/features/admin/AlertsBar";
 import { ConfirmDialog } from "@/features/admin/ConfirmDialog";
 import {
   consolidate,
@@ -33,6 +34,7 @@ import {
   type OrderFilters,
 } from "@/features/admin/orders-logic";
 import { btnPlain, btnPrimary, errMsg, field } from "@/features/admin/ui";
+import { useOrderAlerts } from "@/features/admin/useOrderAlerts";
 import { copyText, exportExcel, exportPdf, toText } from "@/lib/export";
 import { formatBRL, formatSaoPauloTime } from "@/lib/format";
 import {
@@ -95,6 +97,7 @@ function OrdersPage() {
     refetchInterval: 30_000,
   });
   const orders = useMemo(() => q.data ?? [], [q.data]);
+  const alerts = useOrderAlerts({ roundId, active: !!round && round.state !== "closed" });
   const [filters, setFilters] = useState<OrderFilters>(emptyFilters);
   const [view, setView] = useState<View>("participants");
   const [resetFor, setResetFor] = useState<RoundOrder | null>(null);
@@ -161,10 +164,26 @@ function OrdersPage() {
           </div>
         )}
       </header>
+      {round && <AlertsBar alerts={alerts} />}
+      {alerts.newIds.size > 0 && (
+        <div
+          role="status"
+          className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border-2 border-foreground bg-secondary p-3 text-secondary-foreground"
+        >
+          <p className="text-sm font-bold">
+            {alerts.newIds.size === 1
+              ? "1 pedido novo ou alterado"
+              : `${alerts.newIds.size} pedidos novos ou alterados`}
+          </p>
+          <button type="button" className={btnPlain} onClick={alerts.markSeen}>
+            <Check className="h-4 w-4" aria-hidden /> Marcar como vistos
+          </button>
+        </div>
+      )}
       {q.dataUpdatedAt > 0 && (
         <p className="-mt-3 mb-4 text-xs text-muted-foreground" aria-live="off">
           Atualizado às {formatSaoPauloTime(new Date(q.dataUpdatedAt).toISOString())} · atualiza
-          sozinho a cada 30 s
+          sozinho
         </p>
       )}
 
@@ -340,6 +359,7 @@ function OrdersPage() {
                   key={o.order_id}
                   order={o}
                   index={i}
+                  isNew={alerts.newIds.has(o.order_id)}
                   onReset={() => setResetFor(o)}
                 />
               ))}
@@ -402,10 +422,12 @@ function OrdersPage() {
 function ParticipantCard({
   order: o,
   index,
+  isNew,
   onReset,
 }: {
   order: RoundOrder;
   index: number;
+  isNew: boolean;
   onReset: () => void;
 }) {
   const reduce = useReducedMotion();
@@ -415,10 +437,15 @@ function ParticipantCard({
       initial={reduce ? false : { opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: Math.min(index * 0.03, 0.25) }}
-      className="pop-card p-4"
+      className={`pop-card p-4 ${isNew ? "ring-4 ring-primary/50" : ""}`}
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
+          {isNew && (
+            <span className="mb-1 inline-block rounded-full bg-primary px-2.5 py-0.5 text-xs font-bold uppercase tracking-wider text-primary-foreground">
+              Novo
+            </span>
+          )}
           <h3 className="truncate text-3xl">{o.participant}</h3>
           <p className="text-sm text-muted-foreground">{o.phone ?? "Sem celular"}</p>
         </div>
