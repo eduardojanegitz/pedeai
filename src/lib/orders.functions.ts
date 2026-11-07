@@ -386,6 +386,52 @@ export const getMyPayment = createServerFn({ method: "POST" })
     }
   });
 
+// ---------- Quem ainda não pediu (admin) ----------
+
+export type PendingParticipant = { id: string; name: string; phone: string; phoneE164: string };
+
+/**
+ * Participantes com celular que já pediram em outra rodada e não têm pedido confirmado nesta.
+ * Só para administradores (o celular não vai ao navegador do participante). `now` = relógio do servidor.
+ */
+export const getPendingParticipants = createServerFn({ method: "POST" })
+  .middleware([requireAdmin])
+  .validator((d: unknown) => z.object({ roundId: z.string().uuid() }).parse(d))
+  .handler(async ({ data }): Promise<{ now: string; people: PendingParticipant[] }> => {
+    const db = await admin();
+    const [{ data: past, error }, { data: here, error: e2 }] = await Promise.all([
+      db
+        .from("orders")
+        .select("participant_id, participants(display_name, phone_e164)")
+        .eq("status", "confirmed")
+        .neq("round_id", data.roundId)
+        .limit(2000),
+      db
+        .from("orders")
+        .select("participant_id")
+        .eq("status", "confirmed")
+        .eq("round_id", data.roundId),
+    ]);
+    if (error || e2) throw new Error("Não foi possível carregar quem ainda não pediu.");
+    const ordered = new Set((here ?? []).map((r) => r.participant_id));
+    const seen = new Map<string, PendingParticipant>();
+    for (const r of (past ?? []) as unknown as {
+      participant_id: string;
+      participants: { display_name: string; phone_e164: string | null } | null;
+    }[]) {
+      const p = r.participants;
+      if (!p?.phone_e164 || ordered.has(r.participant_id) || seen.has(r.participant_id)) continue;
+      seen.set(r.participant_id, {
+        id: r.participant_id,
+        name: p.display_name,
+        phone: formatPhone(p.phone_e164),
+        phoneE164: p.phone_e164,
+      });
+    }
+    const people = [...seen.values()].sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+    return { now: new Date().toISOString(), people };
+  });
+
 // ---------- Status do pedido do participante ----------
 
 export type MyStatus =

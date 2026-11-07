@@ -33,6 +33,7 @@ import { changedSincePrint, type PrintOptions } from "@/features/admin/comanda";
 import { BoardLinkDialog } from "@/features/admin/BoardLinkDialog";
 import { ConfirmDialog } from "@/features/admin/ConfirmDialog";
 import { PrintDialog } from "@/features/admin/PrintDialog";
+import { PendingCard } from "@/features/admin/PendingCard";
 import { ShareDialog } from "@/features/admin/ShareDialog";
 import {
   consolidate,
@@ -260,10 +261,13 @@ function OrdersPage() {
           </button>
         </div>
       ) : orders.length === 0 ? (
-        <div className="pop-card p-10 text-center">
-          <h2 className="text-4xl">Sem pedidos ainda</h2>
-          <p className="mt-2 text-muted-foreground">Os pedidos confirmados aparecem aqui.</p>
-        </div>
+        <>
+          {round && <PendingCard round={round} />}
+          <div className="pop-card p-10 text-center">
+            <h2 className="text-4xl">Sem pedidos ainda</h2>
+            <p className="mt-2 text-muted-foreground">Os pedidos confirmados aparecem aqui.</p>
+          </div>
+        </>
       ) : (
         <>
           <div
@@ -450,6 +454,8 @@ function OrdersPage() {
               {filtered.length} de {orders.length} pedido(s)
             </p>
           )}
+
+          {round && <PendingCard round={round} />}
 
           {filtered.length === 0 ? (
             <div className="pop-card p-8 text-center">
