@@ -52,6 +52,7 @@ import { Review } from "./Review";
 import { StepProgress } from "./StepProgress";
 import { SummarySheet } from "./SummarySheet";
 import { clearDraft, loadDraft, loadDraftNotes, saveDraft, saveDraftNotes } from "./storage";
+import { uuid } from "@/lib/uuid";
 import { btnPlain, errMsg } from "./ui";
 import type { Menu } from "./types";
 
@@ -258,7 +259,7 @@ export function OrderFlow({
     }
     setBusy(true);
     try {
-      requestId.current ??= crypto.randomUUID();
+      requestId.current ??= uuid();
       const res = await submit({
         data: {
           token,
